@@ -1,11 +1,26 @@
 "use client";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { usePdfStore } from "@/store/pdf";
+import { useUiStore } from "@/store/ui";
+import { supabaseBrowser } from "@/lib/supabaseClient";
 
 export default function UploadPage() {
   const [file, setFile] = React.useState<File | null>(null);
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
+  const { setCurrent } = usePdfStore();
+  const { setRightPanelOpen } = useUiStore();
+
+  const getAccessToken = React.useCallback(async (): Promise<string | null> => {
+    if (!supabaseBrowser) return null;
+    const { data: sess } = await supabaseBrowser.auth.getSession();
+    let token = sess.session?.access_token ?? null;
+    if (!token) {
+      try { const { data } = await supabaseBrowser.auth.refreshSession(); token = data.session?.access_token ?? null; } catch {}
+    }
+    return token;
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,7 +29,19 @@ export default function UploadPage() {
     setMessage(null);
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch("/api/pdf", { method: "POST", body: form });
+    let token = await getAccessToken();
+    if (!token) {
+      setUploading(false);
+      setMessage("Authentication required");
+      return;
+    }
+    let res = await fetch("/api/pdf", { method: "POST", body: form, headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.status === 401) {
+      try { await supabaseBrowser?.auth.refreshSession(); } catch {}
+      token = await getAccessToken();
+      if (!token) { setUploading(false); setMessage("Authentication required"); return; }
+      res = await fetch("/api/pdf", { method: "POST", body: form, headers: { 'Authorization': `Bearer ${token}` } });
+    }
     const data = await res.json().catch(() => ({}));
     setUploading(false);
     if (!res.ok) {
@@ -22,6 +49,57 @@ export default function UploadPage() {
       return;
     }
     setMessage("Uploaded and queued for processing.");
+    
+    // If upload was successful and we have a path, set it as current PDF
+    if (data.path && supabaseBrowser) {
+      // Add a small delay to ensure file is fully processed
+      setTimeout(async () => {
+        try {
+          // Instead of creating signed URL immediately, fetch the files list
+          // to get the properly formatted URL (same as FilesPanel approach)
+          const { data: { session } } = await supabaseBrowser.auth.getSession();
+          let token = session?.access_token;
+          if (!token) {
+            try { await supabaseBrowser.auth.refreshSession(); } catch {}
+            const { data: s2 } = await supabaseBrowser.auth.getSession();
+            token = s2.session?.access_token;
+          }
+        
+        if (token) {
+          const filesRes = await fetch("/api/pdf/list", {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (filesRes.ok) {
+            const filesData = await filesRes.json();
+            const uploadedFile = filesData.files?.find((f: any) => f.path === data.path);
+            
+            if (uploadedFile?.url) {
+              console.log("Setting PDF as current from upload page files list:", file.name, uploadedFile.url);
+              setCurrent({
+                id: null,
+                publicId: null,
+                name: file.name,
+                url: uploadedFile.url,
+                currentPage: 1,
+                totalPages: null
+              });
+              console.log("PDF set as current from upload page, right panel should show automatically");
+            } else {
+              console.log("No URL found for uploaded file in files list:", uploadedFile);
+            }
+          } else {
+            console.error("Failed to fetch files list:", filesRes.statusText);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching files list:", error);
+      }
+    }, 500); // 500ms delay to ensure file is processed
+    }
+    
     setFile(null);
   };
 

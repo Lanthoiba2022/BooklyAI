@@ -1,5 +1,6 @@
 "use client";
 import { useUiStore } from "@/store/ui";
+import { usePdfStore } from "@/store/pdf";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Menu, PanelRightOpen, PanelRightClose } from "lucide-react";
@@ -16,6 +17,10 @@ export function MainLayout({
   right: React.ReactNode;
 }) {
   const { sidebarOpen, rightPanelOpen, setSidebarOpen, setRightPanelOpen } = useUiStore();
+  const { current } = usePdfStore();
+  
+  // Show right panel if there's a current PDF or if explicitly opened
+  const shouldShowRightPanel = rightPanelOpen || !!current;
 
   return (
     <div className="h-screen w-full grid grid-rows-[56px_1fr] overflow-hidden">
@@ -27,8 +32,8 @@ export function MainLayout({
           <span className="font-semibold tracking-tight">Bookly</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
-            {rightPanelOpen ? (
+          <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!shouldShowRightPanel)}>
+            {shouldShowRightPanel ? (
               <PanelRightClose className="h-5 w-5" />
             ) : (
               <PanelRightOpen className="h-5 w-5" />
@@ -49,10 +54,10 @@ export function MainLayout({
         {/* Center + Right (Resizable) */}
         <div className="h-[calc(100vh-56px)] overflow-hidden">
           <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={rightPanelOpen ? 60 : 100} minSize={30}>
+            <ResizablePanel defaultSize={shouldShowRightPanel ? 60 : 100} minSize={30}>
               <main className="h-full overflow-y-auto">{center}</main>
             </ResizablePanel>
-            {rightPanelOpen && (
+            {shouldShowRightPanel && (
               <>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>

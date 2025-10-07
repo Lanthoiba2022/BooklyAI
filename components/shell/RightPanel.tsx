@@ -12,6 +12,11 @@ export function RightPanel() {
     const { current, setCurrent } = usePdfStore();
     const [totalPages, setTotalPages] = React.useState<number | null>(current?.totalPages ?? null);
 
+    // Debug logging
+    React.useEffect(() => {
+        console.log("RightPanel - Current PDF changed:", current);
+    }, [current]);
+
     return (
         <div className="h-full flex flex-col bg-white border-l">
             {/* Header */}

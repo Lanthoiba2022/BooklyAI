@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getAuthenticatedUserFromSession } from "@/lib/auth-server";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs"; // ensure Node for file processing
 
 export async function POST(req: NextRequest) {
+  // Get authenticated user
+  const user = await getAuthenticatedUserFromSession(req);
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   const formData = await req.formData();
   const file = formData.get("file");
   if (!(file instanceof File)) {
@@ -37,13 +44,18 @@ export async function POST(req: NextRequest) {
     // ignore – bucket may already exist
   }
 
-  // Upload to Supabase Storage (bucket: pdfs)
+  // Upload to Supabase Storage (bucket: pdfs) in user-specific folder
   const arrayBuffer = await file.arrayBuffer();
   const bytes = Buffer.from(arrayBuffer);
   const originalName = (file as any).name ?? "upload.pdf";
   const sanitized = originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filename = `${Date.now()}_${sanitized}`;
-  const path = `uploads/${filename}`;
+  const path = `users/${user.id}/${filename}`;
+  
+  // Security check: ensure we're only uploading to the user's folder
+  if (!path.startsWith(`users/${user.id}/`)) {
+    return NextResponse.json({ error: "Invalid upload path" }, { status: 400 });
+  }
 
   const { data: uploadData, error: uploadError } = await supabaseServer.storage
     .from("pdfs")
@@ -54,6 +66,41 @@ export async function POST(req: NextRequest) {
 
   // TODO: insert `pdfs` row and enqueue extraction (Phase 2)
   return NextResponse.json({ ok: true, path: uploadData?.path });
+}
+
+export async function DELETE(req: NextRequest) {
+  // Authenticate user
+  const user = await getAuthenticatedUserFromSession(req);
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  if (!supabaseServer) {
+    return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+  }
+
+  try {
+    const body = await req.json().catch(() => null);
+    const path = body?.path as string | undefined;
+    if (!path || typeof path !== "string") {
+      return NextResponse.json({ error: "Missing path" }, { status: 400 });
+    }
+
+    // Ensure users can only delete within their own folder
+    const userPrefix = `users/${user.id}/`;
+    if (!path.startsWith(userPrefix)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { error } = await supabaseServer.storage.from("pdfs").remove([path]);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to delete" }, { status: 500 });
+  }
 }
 
 

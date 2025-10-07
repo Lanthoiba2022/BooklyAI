@@ -22,10 +22,18 @@ export function AuthStatus() {
     };
     init();
     const { data: sub } =
-      supabaseBrowser?.auth.onAuthStateChange(async () => {
-        const { data } = await supabaseBrowser!.auth.getUser();
-        setEmail(data.user?.email ?? null);
-        setDisplayName((data.user?.user_metadata as any)?.full_name ?? (data.user?.user_metadata as any)?.name ?? null);
+      supabaseBrowser?.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted) return;
+        
+        if (event === 'SIGNED_OUT' || !session) {
+          setEmail(null);
+          setDisplayName(null);
+        } else {
+          const { data } = await supabaseBrowser!.auth.getUser();
+          if (!mounted) return;
+          setEmail(data.user?.email ?? null);
+          setDisplayName((data.user?.user_metadata as any)?.full_name ?? (data.user?.user_metadata as any)?.name ?? null);
+        }
       }) ?? ({} as any);
     return () => {
       mounted = false;
@@ -62,10 +70,13 @@ export function AuthStatus() {
         onClick={() => {
           startTransition(async () => {
             try {
-              await supabaseBrowser?.auth.signOut();
-            } finally {
-              // Optimistic UI + smooth redirect
+              // Clear state immediately for better UX
               setEmail(null);
+              setDisplayName(null);
+              await supabaseBrowser?.auth.signOut();
+            } catch (error) {
+              console.error("Error signing out:", error);
+            } finally {
               router.replace("/");
             }
           });
