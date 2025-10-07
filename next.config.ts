@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
       fs: false,
       path: false,
       crypto: false,
+      canvas: false,
+    };
+
+    // Fully stub 'canvas' so webpack doesn't try to bundle it
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      canvas: false,
     };
     return config;
   },
