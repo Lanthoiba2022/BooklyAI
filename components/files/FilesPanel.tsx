@@ -21,6 +21,7 @@ export function FilesPanel() {
   const [isFetching, setIsFetching] = React.useState(true);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
+  const hasFetchedRef = React.useRef(false);
 
   const checkAuth = async () => {
     if (!supabaseBrowser) {
@@ -86,7 +87,8 @@ export function FilesPanel() {
   React.useEffect(() => {
     setIsAuthenticated(!!user);
     setIsCheckingAuth(false);
-    if (user) {
+    if (user && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       refresh();
     }
   }, [user]);
@@ -102,7 +104,13 @@ export function FilesPanel() {
       const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
           setIsAuthenticated(true);
-          refresh();
+          // Only refetch list on explicit auth changes that affect access
+          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+            hasFetchedRef.current = false;
+            refresh().then(() => {
+              hasFetchedRef.current = true;
+            });
+          }
         }
         setIsCheckingAuth(false);
         clearTimeout(timeout);
@@ -116,11 +124,7 @@ export function FilesPanel() {
     return () => clearTimeout(timeout);
   }, []);
 
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      refresh();
-    }
-  }, [isAuthenticated]);
+  // Removed redundant fetch on isAuthenticated changes to avoid duplicate GETs
 
   const onUpload = async (file?: File) => {
     if (!file || !supabaseBrowser) return;
