@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { getAuthenticatedUserFromSession } from "@/lib/auth-server";
+import { getAuthenticatedUserFromCookies } from "@/lib/auth-server";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs"; // ensure Node for file processing
 
 export async function POST(req: NextRequest) {
-  // Get authenticated user
-  const user = await getAuthenticatedUserFromSession(req);
+  // Get authenticated user via cookie-based session
+  const { user, headers } = await getAuthenticatedUserFromCookies(req);
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
@@ -65,12 +65,15 @@ export async function POST(req: NextRequest) {
   }
 
   // TODO: insert `pdfs` row and enqueue extraction (Phase 2)
-  return NextResponse.json({ ok: true, path: uploadData?.path });
+  const res = NextResponse.json({ ok: true, path: uploadData?.path });
+  // Propagate any updated auth cookies (e.g., refresh) from Supabase SSR
+  headers.forEach((v, k) => res.headers.append(k, v));
+  return res;
 }
 
 export async function DELETE(req: NextRequest) {
-  // Authenticate user
-  const user = await getAuthenticatedUserFromSession(req);
+  // Authenticate user from cookies
+  const { user, headers } = await getAuthenticatedUserFromCookies(req);
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
@@ -97,7 +100,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true });
+    const res = NextResponse.json({ ok: true });
+    headers.forEach((v, k) => res.headers.append(k, v));
+    return res;
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to delete" }, { status: 500 });
   }

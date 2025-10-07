@@ -47,7 +47,7 @@ export default function SignupPage() {
       return;
     }
 
-    // FIXED: Immediately update store with user data
+    // Immediately update store with user data
     if (data.session?.user) {
       const u = data.session.user as any;
       setUser({
@@ -57,7 +57,6 @@ export default function SignupPage() {
         displayName: u.user_metadata?.full_name ?? u.user_metadata?.name ?? null,
         avatarUrl: u.user_metadata?.avatar_url ?? null,
       });
-      try { document.cookie = `bookly_auth=1; Path=/; SameSite=Lax`; } catch {}
     }
 
     setLoading(false);

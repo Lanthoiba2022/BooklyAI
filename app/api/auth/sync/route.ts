@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { getPublicEnv } from "./env";
+import { getPublicEnv } from "@/lib/env";
 
-const { supabaseUrl, supabaseAnonKey } = getPublicEnv();
+export async function POST(req: NextRequest) {
+  const { supabaseUrl, supabaseAnonKey } = getPublicEnv();
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ error: "Not configured" }, { status: 500 });
+  }
 
-type UserResult = { user: any | null; headers: Headers };
-
-// Read Supabase session from HttpOnly cookies and return stable user.id
-export async function getAuthenticatedUserFromCookies(req: NextRequest): Promise<UserResult> {
   const headers = new Headers();
-  if (!supabaseUrl || !supabaseAnonKey) return { user: null, headers };
-
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       get: (name: string) => req.cookies.get(name)?.value,
       set: (name: string, value: string, options: any) => {
-        // Accumulate Set-Cookie headers for caller to attach to response
         const cookie = serializeCookie(name, value, options);
         headers.append("set-cookie", cookie);
       },
@@ -27,14 +24,26 @@ export async function getAuthenticatedUserFromCookies(req: NextRequest): Promise
   });
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    return { user: user ?? null, headers };
-  } catch {
-    return { user: null, headers };
+    const body = await req.json();
+    const access_token = body?.access_token as string | undefined;
+    const refresh_token = body?.refresh_token as string | undefined;
+    if (!access_token || !refresh_token) {
+      return NextResponse.json({ error: "Missing tokens" }, { status: 400 });
+    }
+
+    const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    const res = NextResponse.json({ ok: true, user: data.user ?? null });
+    headers.forEach((v, k) => res.headers.append(k, v));
+    return res;
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to sync" }, { status: 500 });
   }
 }
 
-// Minimal cookie serializer; mirrors set-cookie semantics used by @supabase/ssr
 function serializeCookie(name: string, value: string, options: any = {}): string {
   const enc = encodeURIComponent;
   let cookie = `${name}=${enc(value)}`;
@@ -47,4 +56,5 @@ function serializeCookie(name: string, value: string, options: any = {}): string
   if (options.sameSite) cookie += `; SameSite=${options.sameSite}`;
   return cookie;
 }
+
 

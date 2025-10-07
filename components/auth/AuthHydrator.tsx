@@ -16,14 +16,9 @@ export default function AuthHydrator({ children }: { children: React.ReactNode }
 
     let mounted = true;
 
-    const setAuthCookie = (hasAuth: boolean) => {
-      try {
-        if (hasAuth) {
-          document.cookie = `bookly_auth=1; Path=/; SameSite=Lax`;
-        } else {
-          document.cookie = `bookly_auth=; Path=/; Max-Age=0; SameSite=Lax`;
-        }
-      } catch {}
+    const setAuthCookie = (_hasAuth: boolean) => {
+      // no-op; deprecated cookie removed
+      try { document.cookie = `bookly_auth=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
     };
 
     const applySessionToStore = (session: any) => {
@@ -39,6 +34,19 @@ export default function AuthHydrator({ children }: { children: React.ReactNode }
                        (session.user.user_metadata as any)?.name ?? null,
           avatarUrl: (session.user.user_metadata as any)?.avatar_url ?? null,
         });
+        // Ensure server sees Supabase cookies (middleware) by syncing from client session
+        try {
+          const at = session.access_token;
+          const rt = session.refresh_token;
+          if (at && rt) {
+            fetch('/api/auth/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ access_token: at, refresh_token: rt }),
+            }).catch(() => {});
+          }
+        } catch {}
       } else {
         setAuthCookie(false);
       }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { getAuthenticatedUserFromSession } from "@/lib/auth-server";
+import { getAuthenticatedUserFromCookies } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   // Get authenticated user
-  const user = await getAuthenticatedUserFromSession(req);
+  const { user, headers } = await getAuthenticatedUserFromCookies(req);
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
         };
       })
     );
-    return NextResponse.json({ files });
+    const res = NextResponse.json({ files });
+    headers.forEach((v, k) => res.headers.append(k, v));
+    return res;
   } catch (e) {
     console.error("Error listing user files:", e);
     return NextResponse.json({ files: [] });
