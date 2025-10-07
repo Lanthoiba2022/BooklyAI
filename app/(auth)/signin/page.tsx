@@ -30,12 +30,13 @@ export default function SignInPage() {
     setLoading(true);
     setError(null);
     setInfo(null);
-
+    const url = typeof window !== 'undefined' ? new URL(window.location.href) : null;
+    const redirect = url?.searchParams.get("redirect") || "/";
     await supabaseBrowser.auth.signInWithOAuth({
       provider: "google",
       options: {
         queryParams: { prompt: "select_account" },
-        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
+        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}` : undefined,
       },
     });
     

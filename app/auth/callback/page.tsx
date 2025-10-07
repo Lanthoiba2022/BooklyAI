@@ -24,24 +24,37 @@ export default function AuthCallbackPage() {
         return;
       }
 
-      // If PKCE/OAuth redirect comes back, let Supabase detect session in URL
-      // and then navigate home. For email confirm/magic link, the same applies.
+      // Explicitly exchange the OAuth code for a session to be safe
+      if (code) {
+        try {
+          await supabaseBrowser.auth.exchangeCodeForSession(window.location.href);
+        } catch (e: any) {
+          // continue to next step; getSession below will show status
+        }
+      }
+
+      // Get session and sync cookies to server so middleware sees it immediately
       const { data, error } = await supabaseBrowser.auth.getSession();
       if (error) {
         setMessage(error.message);
         return;
       }
-
-      // If no active session yet, attempt to parse from URL fragment
-      // Supabase client with detectSessionInUrl=true should have processed it already
-      // but we give it a brief moment.
-      if (!data.session && code) {
-        // give the client a tick to process the URL hash
-        await new Promise((r) => setTimeout(r, 250));
+      if (data.session?.access_token && data.session?.refresh_token) {
+        try {
+          await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            }),
+          });
+        } catch {}
       }
 
       // Navigate to home (or to redirect param if present)
-      const redirectTo = params?.get("next") || "/";
+      const redirectTo = params?.get("redirect") || "/";
       router.replace(redirectTo);
     };
 
