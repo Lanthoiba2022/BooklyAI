@@ -96,6 +96,7 @@ export default function SignInPage() {
         displayName: u.user_metadata?.full_name ?? u.user_metadata?.name ?? null,
         avatarUrl: u.user_metadata?.avatar_url ?? null,
       });
+      try { document.cookie = `bookly_auth=1; Path=/; SameSite=Lax`; } catch {}
     }
 
     setLoading(false);
@@ -103,11 +104,13 @@ export default function SignInPage() {
     // Small delay to ensure store propagation
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Navigate to home
+    // Navigate to intended destination or home
+    const url = new URL(window.location.href);
+    const redirect = url.searchParams.get("redirect") || "/";
     if (typeof window !== 'undefined') {
-      window.location.href = "/";
+      window.location.href = redirect;
     } else {
-      router.replace("/");
+      router.replace(redirect);
     }
   };
 

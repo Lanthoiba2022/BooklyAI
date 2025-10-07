@@ -16,10 +16,21 @@ export default function AuthHydrator({ children }: { children: React.ReactNode }
 
     let mounted = true;
 
+    const setAuthCookie = (hasAuth: boolean) => {
+      try {
+        if (hasAuth) {
+          document.cookie = `bookly_auth=1; Path=/; SameSite=Lax`;
+        } else {
+          document.cookie = `bookly_auth=; Path=/; Max-Age=0; SameSite=Lax`;
+        }
+      } catch {}
+    };
+
     const applySessionToStore = (session: any) => {
       if (!mounted) return;
       
       if (session?.user) {
+        setAuthCookie(true);
         setUser({
           id: null,
           publicId: session.user.id,
@@ -28,6 +39,8 @@ export default function AuthHydrator({ children }: { children: React.ReactNode }
                        (session.user.user_metadata as any)?.name ?? null,
           avatarUrl: (session.user.user_metadata as any)?.avatar_url ?? null,
         });
+      } else {
+        setAuthCookie(false);
       }
     };
 
@@ -83,6 +96,7 @@ export default function AuthHydrator({ children }: { children: React.ReactNode }
 
       if (event === 'SIGNED_OUT') {
         setUser(null);
+        setAuthCookie(false);
         try { router.refresh(); } catch {}
         return;
       }

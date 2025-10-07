@@ -136,41 +136,27 @@ export function CenterChat() {
   return (
     <div className="h-full grid grid-rows-[1fr_auto]">
       <div className="p-4 space-y-3 overflow-y-auto">
-        {!isAuthenticated ? (
-          <div className="text-center py-8">
-            <div className="text-4xl mb-4">🔒</div>
-            <div className="text-lg font-medium text-zinc-700 mb-2">Authentication Required</div>
-            <div className="text-sm text-zinc-500 mb-4">Please sign in to start chatting and upload PDFs</div>
-            <a href="/signin">
-              <Button>Sign In</Button>
-            </a>
-          </div>
-        ) : (
-          <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
-        )}
+        <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
       </div>
       <div className="border-t p-3">
         <form
           className="flex items-end justify-center"
           onSubmit={(e) => {
             e.preventDefault();
-            if (isAuthenticated) {
-              setValue("");
-              // Reset textarea height after clearing value
-              setTimeout(adjustHeight, 0);
-            }
+            setValue("");
+            // Reset textarea height after clearing value
+            setTimeout(adjustHeight, 0);
           }}
         >
           <div className="w-full max-w-4xl">
-            <div className={`relative rounded-xl border px-3 py-2 shadow-sm ${isAuthenticated ? 'bg-white focus-within:ring-2 focus-within:ring-zinc-200' : 'bg-zinc-100'}`}>
+            <div className={`relative rounded-xl border px-3 py-2 shadow-sm bg-white focus-within:ring-2 focus-within:ring-zinc-200`}>
               <textarea
                 ref={textareaRef}
                 value={value}
                 onChange={handleValueChange}
                 onKeyDown={handleKeyDown}
                 onInput={handleInput}
-                placeholder={isAuthenticated ? "Ask me anything or upload a PDF file..." : "Please sign in to start chatting..."}
-                disabled={!isAuthenticated}
+                placeholder={"Ask me anything or upload a PDF file..."}
                 className="w-full resize-none outline-none text-sm placeholder:text-zinc-400 bg-transparent py-2 pr-24 min-h-[20px] max-h-[300px] overflow-y-auto leading-relaxed disabled:cursor-not-allowed"
                 style={{ height: 'auto' }}
               />
@@ -184,7 +170,7 @@ export function CenterChat() {
                   className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (!file || !isAuthenticated || !supabaseBrowser) return;
+                    if (!file || !supabaseBrowser) return;
                     setUploading(true);
                     try {
                       const { data: { session } } = await supabaseBrowser.auth.getSession();
@@ -275,8 +261,8 @@ export function CenterChat() {
                   variant="ghost"
                   size="icon"
                   aria-label="Attach"
-                  onClick={() => isAuthenticated && fileInputRef.current?.click()}
-                  disabled={uploading || !isAuthenticated}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
                   className="h-8 w-8 p-0"
                 >
                   <Paperclip className="h-4 w-4" />
@@ -293,7 +279,7 @@ export function CenterChat() {
                 <Button 
                   type="submit" 
                   aria-label="Send" 
-                  disabled={uploading || !isAuthenticated} 
+                  disabled={uploading} 
                   className="h-8 w-8 p-0 bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
                 >
                   <Send className="h-4 w-4" />
