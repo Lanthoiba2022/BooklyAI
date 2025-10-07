@@ -19,8 +19,9 @@ export function MainLayout({
   const { sidebarOpen, rightPanelOpen, setSidebarOpen, setRightPanelOpen } = useUiStore();
   const { current } = usePdfStore();
   
-  // Show right panel if there's a current PDF or if explicitly opened
-  const shouldShowRightPanel = rightPanelOpen || !!current;
+  // The right panel visibility should be controlled solely by the UI toggle.
+  // When a PDF is selected elsewhere, that code should explicitly open the panel.
+  const shouldShowRightPanel = rightPanelOpen;
 
   return (
     <div className="h-screen w-full grid grid-rows-[56px_1fr] overflow-hidden">
@@ -32,8 +33,8 @@ export function MainLayout({
           <span className="font-semibold tracking-tight">Bookly</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!shouldShowRightPanel)}>
-            {shouldShowRightPanel ? (
+          <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
+            {rightPanelOpen ? (
               <PanelRightClose className="h-5 w-5" />
             ) : (
               <PanelRightOpen className="h-5 w-5" />

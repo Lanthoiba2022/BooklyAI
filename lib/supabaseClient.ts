@@ -14,7 +14,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabaseBrowser = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Ensure robust session behavior across tabs and refreshes
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
+        storageKey: "sb-bookly-auth",
+      },
+    })
   : undefined;
 
 

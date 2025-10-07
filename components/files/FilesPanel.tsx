@@ -6,10 +6,12 @@ import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
 import { X, Trash2 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
+import { useAuthStore } from "@/store/auth";
 
 type FileItem = { name: string; id: string; path: string; url?: string };
 
 export function FilesPanel() {
+  const { user } = useAuthStore();
   const [files, setFiles] = React.useState<FileItem[]>([]);
   const [uploading, setUploading] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -19,156 +21,158 @@ export function FilesPanel() {
   const [isFetching, setIsFetching] = React.useState(true);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
+  const hasFetchedRef = React.useRef(false);
 
   const checkAuth = async () => {
     if (!supabaseBrowser) {
-      setIsAuthenticated(false);
       setIsCheckingAuth(false);
       return;
     }
-    
     try {
       const { data: { session } } = await supabaseBrowser.auth.getSession();
-      setIsAuthenticated(!!session?.user);
+      if (session?.user) {
+        setIsAuthenticated(true);
+      }
     } catch (error) {
       console.error("Error checking auth:", error);
-      setIsAuthenticated(false);
     } finally {
       setIsCheckingAuth(false);
     }
   };
 
+  const getValidToken = async (): Promise<string | null> => {
+    if (!supabaseBrowser) return null;
+    let { data: { session } } = await supabaseBrowser.auth.getSession();
+    if (session?.access_token) return session.access_token;
+    try {
+      await supabaseBrowser.auth.refreshSession();
+      ({ data: { session } } = await supabaseBrowser.auth.getSession());
+      return session?.access_token ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   const refresh = async () => {
-    if (!isAuthenticated || !supabaseBrowser) return [];
-    
+    if (!supabaseBrowser) return [] as FileItem[];
     setIsFetching(true);
     try {
-      const { data: { session } } = await supabaseBrowser.auth.getSession();
-      const token = session?.access_token;
-      
+      let token = await getValidToken();
       if (!token) {
-        console.error("No authentication token available");
-        return [];
+        console.warn("No authentication token available after refresh attempt");
+        return [] as FileItem[];
       }
-      
-      const res = await fetch("/api/pdf/list", {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
+      let res = await fetch("/api/pdf/list", { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.status === 401) {
-        // Authentication failed, user might need to log in again
-        setIsAuthenticated(false);
-        return [];
+        await supabaseBrowser.auth.refreshSession();
+        token = (await supabaseBrowser.auth.getSession()).data.session?.access_token ?? null;
+        if (!token) return [] as FileItem[];
+        res = await fetch("/api/pdf/list", { headers: { 'Authorization': `Bearer ${token}` } });
       }
-      
       if (res.ok) {
         const data = await res.json();
         setFiles(data.files ?? []);
         return data.files ?? [];
-      } else {
-        console.error("Failed to fetch PDFs:", res.statusText);
-        return [];
       }
+      console.error("Failed to fetch PDFs:", res.statusText);
+      return [] as FileItem[];
     } catch (error) {
       console.error("Error fetching PDFs:", error);
-      return [];
+      return [] as FileItem[];
     } finally {
       setIsFetching(false);
     }
   };
 
   React.useEffect(() => {
+    setIsAuthenticated(!!user);
+    setIsCheckingAuth(false);
+    if (user && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      refresh();
+    }
+  }, [user]);
+
+  React.useEffect(() => {
     checkAuth();
-    
-    // Fallback timeout to prevent infinite checking
+
     const timeout = setTimeout(() => {
       setIsCheckingAuth(false);
-    }, 5000); // 5 second timeout
-    
-    // Listen for authentication state changes
+    }, 5000);
+
     if (supabaseBrowser) {
       const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange((event, session) => {
-        setIsAuthenticated(!!session?.user);
-        setIsCheckingAuth(false);
-        clearTimeout(timeout); // Clear timeout when auth state changes
-        
         if (session?.user) {
-          refresh();
-        } else {
-          setFiles([]);
+          setIsAuthenticated(true);
+          // Only refetch list on explicit auth changes that affect access
+          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+            hasFetchedRef.current = false;
+            refresh().then(() => {
+              hasFetchedRef.current = true;
+            });
+          }
         }
+        setIsCheckingAuth(false);
+        clearTimeout(timeout);
       });
-      
       return () => {
         clearTimeout(timeout);
         subscription.unsubscribe();
       };
     }
-    
+
     return () => clearTimeout(timeout);
   }, []);
 
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      refresh();
-    } else {
-      setFiles([]);
-    }
-  }, [isAuthenticated]);
+  // Removed redundant fetch on isAuthenticated changes to avoid duplicate GETs
 
   const onUpload = async (file?: File) => {
-    if (!file || !isAuthenticated || !supabaseBrowser) return;
+    if (!file || !supabaseBrowser) return;
     setUploading(true);
     try {
-      const { data: { session } } = await supabaseBrowser.auth.getSession();
-      const token = session?.access_token;
-      
-      if (!token) {
-        console.error("No authentication token available");
-        return;
-      }
-      
+      let token = await getValidToken();
+      if (!token) return;
+
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/pdf", { 
-        method: "POST", 
+      let res = await fetch("/api/pdf", {
+        method: "POST",
         body: form,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-      
       if (res.status === 401) {
-        // Authentication failed, user might need to log in again
-        setIsAuthenticated(false);
-        return;
-      }
-      
-      if (res.ok) {
-        const uploadData = await res.json();
-        // Refresh the files list and get the updated files
+        await supabaseBrowser.auth.refreshSession();
+        token = (await supabaseBrowser.auth.getSession()).data.session?.access_token ?? null;
+        if (!token) return;
+        const retry = await fetch("/api/pdf", {
+          method: "POST",
+          body: form,
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!retry.ok) return;
+        const uploadData = await retry.json();
         const updatedFiles = await refresh();
-        
-        // Find the uploaded file in the refreshed files list and set it as current
         if (uploadData.path && updatedFiles.length > 0) {
           const uploadedFile = updatedFiles.find((f: any) => f.path === uploadData.path);
-          
           if (uploadedFile?.url) {
-            // Set the uploaded PDF as current and open right panel
             console.log("Setting PDF as current from FilesPanel:", file.name, uploadedFile.url);
-            setCurrent({
-              id: null,
-              publicId: null,
-              name: file.name,
-              url: uploadedFile.url,
-              currentPage: 1,
-              totalPages: null
-            });
-            console.log("PDF set as current from FilesPanel, right panel should show automatically");
-          } else {
-            console.log("No URL found for uploaded file:", uploadedFile);
+            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: null });
+            setRightPanelOpen(true);
+            console.log("PDF set as current from FilesPanel and right panel opened");
+          }
+        }
+        return;
+      }
+      if (res.ok) {
+        const uploadData = await res.json();
+        const updatedFiles = await refresh();
+        if (uploadData.path && updatedFiles.length > 0) {
+          const uploadedFile = updatedFiles.find((f: any) => f.path === uploadData.path);
+          if (uploadedFile?.url) {
+            console.log("Setting PDF as current from FilesPanel:", file.name, uploadedFile.url);
+            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: null });
+            setRightPanelOpen(true);
+            console.log("PDF set as current from FilesPanel and right panel opened");
           }
         }
       } else {
@@ -182,26 +186,28 @@ export function FilesPanel() {
   };
 
   const onDelete = async (path: string) => {
-    if (!isAuthenticated || !supabaseBrowser) return;
+    if (!supabaseBrowser) return;
     const confirmDelete = window.confirm("Delete this PDF permanently?");
     if (!confirmDelete) return;
     try {
-      const { data: { session } } = await supabaseBrowser.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        setIsAuthenticated(false);
-        return;
-      }
-      const res = await fetch("/api/pdf", {
+      let token = await getValidToken();
+      if (!token) return;
+      let res = await fetch("/api/pdf", {
         method: "DELETE",
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ path })
       });
       if (res.status === 401) {
-        setIsAuthenticated(false);
+        await supabaseBrowser.auth.refreshSession();
+        token = (await supabaseBrowser.auth.getSession()).data.session?.access_token ?? null;
+        if (!token) return;
+        const retry = await fetch("/api/pdf", {
+          method: "DELETE",
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ path })
+        });
+        if (!retry.ok) return;
+        await refresh();
         return;
       }
       if (res.ok) {
@@ -245,7 +251,7 @@ export function FilesPanel() {
             <div className="text-lg font-medium text-zinc-700">Authentication Required</div>
             <div className="text-sm text-zinc-500">Please sign in to view and manage your PDFs</div>
           </div>
-          <a href="/login">
+          <a href="/signin">
             <Button>Sign In</Button>
           </a>
         </div>

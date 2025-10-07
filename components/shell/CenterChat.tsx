@@ -5,6 +5,7 @@ import * as React from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
+import { useAuthStore } from "@/store/auth";
 
 // Custom hook for auto-resizing textarea
 function useAutoResizeTextarea() {
@@ -38,6 +39,7 @@ export function CenterChat() {
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
   const { setCurrent, current } = usePdfStore();
   const { setRightPanelOpen, rightPanelOpen } = useUiStore();
+  const { user } = useAuthStore();
 
   const handleValueChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -54,6 +56,12 @@ export function CenterChat() {
     // Also adjust height on input event
     setTimeout(adjustHeight, 0);
   };
+
+  // React immediately to global auth changes (e.g., after OAuth redirect)
+  React.useEffect(() => {
+    setIsAuthenticated(!!user);
+    setIsCheckingAuth(false);
+  }, [user]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
@@ -133,7 +141,7 @@ export function CenterChat() {
             <div className="text-4xl mb-4">🔒</div>
             <div className="text-lg font-medium text-zinc-700 mb-2">Authentication Required</div>
             <div className="text-sm text-zinc-500 mb-4">Please sign in to start chatting and upload PDFs</div>
-            <a href="/login">
+            <a href="/signin">
               <Button>Sign In</Button>
             </a>
           </div>
