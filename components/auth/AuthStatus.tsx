@@ -75,11 +75,23 @@ export function AuthStatus() {
         size="icon"
         disabled={isPending}
         onClick={() => {
+          // Schedule reload IMMEDIATELY - doesn't wait for anything
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.location.reload();
+            }
+          }, 1000);
+
           startTransition(async () => {
             try {
               // Clear state immediately for better UX
               setEmail(null);
               setDisplayName(null);
+              // First, clear server HttpOnly cookies so middleware recognizes sign-out
+              try {
+                await fetch('/api/auth/signout', { method: 'POST', credentials: 'include', keepalive: true });
+              } catch {}
+              // Then clear client session
               await supabaseBrowser?.auth.signOut();
               // Force clear local session to avoid stale UI in other listeners
               try { localStorage.removeItem("sb-bookly-auth"); } catch {}
@@ -87,14 +99,6 @@ export function AuthStatus() {
               try { document.cookie = `bookly_auth=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
             } catch (error) {
               console.error("Error signing out:", error);
-            } finally {
-              try {
-                if (typeof window !== 'undefined') {
-                  window.location.assign("/");
-                  return;
-                }
-              } catch {}
-              router.replace("/");
             }
           });
         }}
@@ -104,5 +108,3 @@ export function AuthStatus() {
     </div>
   );
 }
-
-
