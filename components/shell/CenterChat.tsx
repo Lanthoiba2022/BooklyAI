@@ -2,6 +2,9 @@
 import { Button } from "@/components/ui/button";
 import { Send, Mic, Paperclip } from "lucide-react";
 import * as React from "react";
+import { supabaseBrowser } from "@/lib/supabaseClient";
+import { usePdfStore } from "@/store/pdf";
+import { useUiStore } from "@/store/ui";
 
 // Custom hook for auto-resizing textarea
 function useAutoResizeTextarea() {
@@ -31,6 +34,10 @@ export function CenterChat() {
   const [uploading, setUploading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea();
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
+  const { setCurrent, current } = usePdfStore();
+  const { setRightPanelOpen, rightPanelOpen } = useUiStore();
 
   const handleValueChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -48,35 +55,115 @@ export function CenterChat() {
     setTimeout(adjustHeight, 0);
   };
 
+  // Check authentication status and listen for changes
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      if (!supabaseBrowser) {
+        setIsAuthenticated(false);
+        setIsCheckingAuth(false);
+        return;
+      }
+      
+      try {
+        const { data: { session } } = await supabaseBrowser.auth.getSession();
+        setIsAuthenticated(!!session?.user);
+      } catch (error) {
+        console.error("Error checking auth:", error);
+        setIsAuthenticated(false);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
+    
+    // Fallback timeout to prevent infinite checking
+    const timeout = setTimeout(() => {
+      setIsCheckingAuth(false);
+    }, 5000); // 5 second timeout
+    
+    // Listen for authentication state changes
+    if (supabaseBrowser) {
+      const { data: { subscription } } = supabaseBrowser.auth.onAuthStateChange((event, session) => {
+        setIsAuthenticated(!!session?.user);
+        setIsCheckingAuth(false);
+        clearTimeout(timeout); // Clear timeout when auth state changes
+      });
+      
+      return () => {
+        clearTimeout(timeout);
+        subscription.unsubscribe();
+      };
+    }
+    
+    return () => clearTimeout(timeout);
+  }, []);
+
   // Adjust height when value changes
   React.useEffect(() => {
     adjustHeight();
   }, [value, adjustHeight]);
+  // Show loading state while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="h-full grid grid-rows-[1fr_auto]">
+        <div className="p-4 space-y-3 overflow-y-auto">
+          <div className="text-center py-8">
+            <div className="text-sm text-zinc-500">Checking authentication...</div>
+          </div>
+        </div>
+        <div className="border-t p-3">
+          <div className="flex items-end justify-center">
+            <div className="w-full max-w-4xl">
+              <div className="relative rounded-xl border bg-zinc-100 px-3 py-2 shadow-sm">
+                <div className="text-sm text-zinc-400 py-2 pr-24">Please wait...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full grid grid-rows-[1fr_auto]">
       <div className="p-4 space-y-3 overflow-y-auto">
-        <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
+        {!isAuthenticated ? (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-4">🔒</div>
+            <div className="text-lg font-medium text-zinc-700 mb-2">Authentication Required</div>
+            <div className="text-sm text-zinc-500 mb-4">Please sign in to start chatting and upload PDFs</div>
+            <a href="/login">
+              <Button>Sign In</Button>
+            </a>
+          </div>
+        ) : (
+          <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
+        )}
       </div>
       <div className="border-t p-3">
         <form
           className="flex items-end justify-center"
           onSubmit={(e) => {
             e.preventDefault();
-            setValue("");
-            // Reset textarea height after clearing value
-            setTimeout(adjustHeight, 0);
+            if (isAuthenticated) {
+              setValue("");
+              // Reset textarea height after clearing value
+              setTimeout(adjustHeight, 0);
+            }
           }}
         >
           <div className="w-full max-w-4xl">
-            <div className="relative rounded-xl border bg-white px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-zinc-200">
+            <div className={`relative rounded-xl border px-3 py-2 shadow-sm ${isAuthenticated ? 'bg-white focus-within:ring-2 focus-within:ring-zinc-200' : 'bg-zinc-100'}`}>
               <textarea
                 ref={textareaRef}
                 value={value}
                 onChange={handleValueChange}
                 onKeyDown={handleKeyDown}
                 onInput={handleInput}
-                placeholder="Ask me anything or upload a PDF file..."
-                className="w-full resize-none outline-none text-sm placeholder:text-zinc-400 bg-transparent py-2 pr-24 min-h-[20px] max-h-[300px] overflow-y-auto leading-relaxed"
+                placeholder={isAuthenticated ? "Ask me anything or upload a PDF file..." : "Please sign in to start chatting..."}
+                disabled={!isAuthenticated}
+                className="w-full resize-none outline-none text-sm placeholder:text-zinc-400 bg-transparent py-2 pr-24 min-h-[20px] max-h-[300px] overflow-y-auto leading-relaxed disabled:cursor-not-allowed"
                 style={{ height: 'auto' }}
               />
               
@@ -89,15 +176,86 @@ export function CenterChat() {
                   className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (!file) return;
+                    if (!file || !isAuthenticated || !supabaseBrowser) return;
                     setUploading(true);
                     try {
+                      const { data: { session } } = await supabaseBrowser.auth.getSession();
+                      const token = session?.access_token;
+                      
+                      if (!token) {
+                        console.error("No authentication token available");
+                        return;
+                      }
+                      
                       const form = new FormData();
                       form.append("file", file);
-                      const res = await fetch("/api/pdf", { method: "POST", body: form });
-                      if (!res.ok) {
-                        console.error("Upload failed");
+                      const res = await fetch("/api/pdf", { 
+                        method: "POST", 
+                        body: form,
+                        headers: {
+                          'Authorization': `Bearer ${token}`,
+                        },
+                      });
+                      
+                      if (res.status === 401) {
+                        // Authentication failed, user might need to log in again
+                        setIsAuthenticated(false);
+                        return;
                       }
+                      
+                      if (!res.ok) {
+                        console.error("Upload failed:", res.statusText);
+                      } else {
+                        // Get the uploaded file URL and set it as current PDF
+                        const uploadData = await res.json();
+                        console.log("Upload response:", uploadData);
+                        if (uploadData.path) {
+                          // Instead of creating signed URL immediately, fetch the files list
+                          // to get the properly formatted URL (same as FilesPanel approach)
+                          // Add a small delay to ensure file is fully processed
+                          setTimeout(async () => {
+                            try {
+                              if (!supabaseBrowser) return;
+                              const { data: { session } } = await supabaseBrowser.auth.getSession();
+                              const token = session?.access_token;
+                            
+                              if (token) {
+                                const filesRes = await fetch("/api/pdf/list", {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                  },
+                                });
+                                
+                                if (filesRes.ok) {
+                                  const filesData = await filesRes.json();
+                                  const uploadedFile = filesData.files?.find((f: any) => f.path === uploadData.path);
+                                  
+                                  if (uploadedFile?.url) {
+                                    console.log("Setting PDF as current from files list:", file.name, uploadedFile.url);
+                                    setCurrent({
+                                      id: null,
+                                      publicId: null,
+                                      name: file.name,
+                                      url: uploadedFile.url,
+                                      currentPage: 1,
+                                      totalPages: null
+                                    });
+                                    console.log("PDF set as current, right panel should show automatically");
+                                  } else {
+                                    console.log("No URL found for uploaded file in files list:", uploadedFile);
+                                  }
+                                } else {
+                                  console.error("Failed to fetch files list:", filesRes.statusText);
+                                }
+                              }
+                            } catch (error) {
+                              console.error("Error fetching files list:", error);
+                            }
+                          }, 500); // 500ms delay to ensure file is processed
+                        }
+                      }
+                    } catch (error) {
+                      console.error("Error uploading file:", error);
                     } finally {
                       setUploading(false);
                       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -109,8 +267,8 @@ export function CenterChat() {
                   variant="ghost"
                   size="icon"
                   aria-label="Attach"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
+                  onClick={() => isAuthenticated && fileInputRef.current?.click()}
+                  disabled={uploading || !isAuthenticated}
                   className="h-8 w-8 p-0"
                 >
                   <Paperclip className="h-4 w-4" />
@@ -127,7 +285,7 @@ export function CenterChat() {
                 <Button 
                   type="submit" 
                   aria-label="Send" 
-                  disabled={uploading} 
+                  disabled={uploading || !isAuthenticated} 
                   className="h-8 w-8 p-0 bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
                 >
                   <Send className="h-4 w-4" />

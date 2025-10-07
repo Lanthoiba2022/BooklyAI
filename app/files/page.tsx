@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 
 type FileItem = { name: string; id: string; path: string; url?: string };
 
@@ -32,6 +33,11 @@ export default function FilesPage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const onDelete = async (path: string) => {
+    const res = await fetch("/api/pdf", { method: "DELETE", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+    if (res.ok) await refresh();
   };
 
   return (
@@ -67,11 +73,18 @@ export default function FilesPage() {
         </div>
 
         {files.map((f) => (
-          <div key={f.id} className="rounded-lg border p-3 bg-white flex items-center justify-between">
-            <div className="text-sm truncate" title={f.name}>{f.name}</div>
-            {f.url ? (
-              <a href={f.url} target="_blank" rel="noreferrer" className="text-xs text-primary">Open</a>
-            ) : null}
+          <div key={f.id} className="rounded-lg border p-3 bg-white flex items-center min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm truncate" title={f.name}>{f.name}</div>
+              {f.url ? (
+                <a href={f.url} target="_blank" rel="noreferrer" className="text-xs text-primary">Open</a>
+              ) : null}
+            </div>
+            <div className="shrink-0 pl-2">
+              <button className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-zinc-100" onClick={() => onDelete(f.path)} title="Delete">
+                <Trash2 className="h-4 w-4 text-zinc-600" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
