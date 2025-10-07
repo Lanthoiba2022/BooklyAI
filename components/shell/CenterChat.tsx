@@ -173,30 +173,22 @@ export function CenterChat() {
                     if (!file || !supabaseBrowser) return;
                     setUploading(true);
                     try {
-                      const { data: { session } } = await supabaseBrowser.auth.getSession();
-                      const token = session?.access_token;
-                      
-                      if (!token) {
-                        console.error("No authentication token available");
-                        return;
-                      }
-                      
                       const form = new FormData();
                       form.append("file", file);
-                      const res = await fetch("/api/pdf", { 
-                        method: "POST", 
+                      let res = await fetch("/api/pdf", {
+                        method: "POST",
                         body: form,
-                        headers: {
-                          'Authorization': `Bearer ${token}`,
-                        },
+                        credentials: 'include',
                       });
-                      
                       if (res.status === 401) {
-                        // Authentication failed, user might need to log in again
-                        setIsAuthenticated(false);
-                        return;
+                        await supabaseBrowser.auth.refreshSession();
+                        res = await fetch("/api/pdf", {
+                          method: "POST",
+                          body: form,
+                          credentials: 'include',
+                        });
                       }
-                      
+
                       if (!res.ok) {
                         console.error("Upload failed:", res.statusText);
                       } else {
@@ -210,37 +202,33 @@ export function CenterChat() {
                           setTimeout(async () => {
                             try {
                               if (!supabaseBrowser) return;
-                              const { data: { session } } = await supabaseBrowser.auth.getSession();
-                              const token = session?.access_token;
-                            
-                              if (token) {
-                                const filesRes = await fetch("/api/pdf/list", {
-                                  headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                  },
-                                });
-                                
-                                if (filesRes.ok) {
-                                  const filesData = await filesRes.json();
-                                  const uploadedFile = filesData.files?.find((f: any) => f.path === uploadData.path);
-                                  
-                                  if (uploadedFile?.url) {
-                                    console.log("Setting PDF as current from files list:", file.name, uploadedFile.url);
-                                    setCurrent({
-                                      id: null,
-                                      publicId: null,
-                                      name: file.name,
-                                      url: uploadedFile.url,
-                                      currentPage: 1,
-                                      totalPages: null
-                                    });
-                                    console.log("PDF set as current, right panel should show automatically");
-                                  } else {
-                                    console.log("No URL found for uploaded file in files list:", uploadedFile);
-                                  }
+                              let filesRes = await fetch("/api/pdf/list", {
+                                credentials: 'include',
+                              });
+                              if (filesRes.status === 401) {
+                                await supabaseBrowser.auth.refreshSession();
+                                filesRes = await fetch("/api/pdf/list", { credentials: 'include' });
+                              }
+                              if (filesRes.ok) {
+                                const filesData = await filesRes.json();
+                                const uploadedFile = filesData.files?.find((f: any) => f.path === uploadData.path);
+                                if (uploadedFile?.url) {
+                                  console.log("Setting PDF as current from files list:", file.name, uploadedFile.url);
+                                  setCurrent({
+                                    id: null,
+                                    publicId: null,
+                                    name: file.name,
+                                    url: uploadedFile.url,
+                                    currentPage: 1,
+                                    totalPages: null
+                                  });
+                                  setRightPanelOpen(true);
+                                  console.log("PDF set as current and right panel opened");
                                 } else {
-                                  console.error("Failed to fetch files list:", filesRes.statusText);
+                                  console.log("No URL found for uploaded file in files list:", uploadedFile);
                                 }
+                              } else {
+                                console.error("Failed to fetch files list:", filesRes.statusText);
                               }
                             } catch (error) {
                               console.error("Error fetching files list:", error);
