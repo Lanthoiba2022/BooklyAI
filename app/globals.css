@@ -160,3 +160,28 @@
     background-color: hsl(var(--border));
   }
 }
+
+/* PDF Viewer Scale Factor Fix */
+.rpv-core__viewer {
+  --scale-factor: 1;
+  min-scale: 0.5; /* Prevent zooming below 50% */
+}
+
+.rpv-core__viewer * {
+  --scale-factor: inherit;
+}
+
+/* Disable zoom controls in fullscreen */
+.rpv-full-screen .rpv-zoom__popover {
+  display: none !important;
+}
+
+.rpv-full-screen .rpv-zoom__menu {
+  display: none !important;
+}
+
+/* Ensure minimum scale factor is maintained */
+.rpv-core__viewer[style*="--scale-factor"] {
+  --scale-factor: max(var(--scale-factor), 0.5);
+}
+
