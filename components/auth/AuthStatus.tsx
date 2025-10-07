@@ -46,7 +46,7 @@ export function AuthStatus() {
     );
   }
 
-  const nameOrEmail = displayName && displayName.trim().length > 0 ? displayName : email;
+  const nameOrEmail = email;
   const shortLabel = nameOrEmail.length > 26 ? nameOrEmail.slice(0, 23) + "…" : nameOrEmail;
 
   return (

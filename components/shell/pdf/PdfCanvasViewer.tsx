@@ -13,6 +13,8 @@ export default function PdfCanvasViewer({ url, page, scale, onLoaded }: PdfCanva
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
     const renderTaskRef = React.useRef<any>(null);
+    const pdfDocumentRef = React.useRef<any>(null);
+    const [isInitialLoad, setIsInitialLoad] = React.useState(true);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -31,15 +33,24 @@ export default function PdfCanvasViewer({ url, page, scale, onLoaded }: PdfCanva
         }
 
         async function loadAndRender() {
-			setLoading(true);
+			// Only show loading for initial load, not for page navigation
+			if (isInitialLoad) {
+				setLoading(true);
+			}
 			setError(null);
 			try {
                 const pdfjsLib = await ensurePdfJs();
                 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-                const loadingTask = pdfjsLib.getDocument(url);
-				const pdf = await loadingTask.promise;
-				if (cancelled) return;
-				onLoaded?.(pdf.numPages);
+                
+                // Only load PDF document if it's not cached or URL changed
+                let pdf = pdfDocumentRef.current;
+                if (!pdf || pdf._transport?.url !== url) {
+                    const loadingTask = pdfjsLib.getDocument(url);
+                    pdf = await loadingTask.promise;
+                    if (cancelled) return;
+                    pdfDocumentRef.current = pdf;
+                    onLoaded?.(pdf.numPages);
+                }
 
 				const safePage = Math.min(Math.max(1, page), pdf.numPages);
 				const pdfPage = await pdf.getPage(safePage);
@@ -64,6 +75,7 @@ export default function PdfCanvasViewer({ url, page, scale, onLoaded }: PdfCanva
                 await task.promise;
 				if (cancelled) return;
 				setLoading(false);
+				setIsInitialLoad(false);
 			} catch (e: any) {
                 // Ignore cancellation errors gracefully
                 if (e && (e.name === "RenderingCancelledException" || e.message?.includes("Rendering cancelled") )) {
@@ -83,6 +95,12 @@ export default function PdfCanvasViewer({ url, page, scale, onLoaded }: PdfCanva
             }
 		};
 	}, [url, page, scale, onLoaded]);
+
+	// Reset initial load state when URL changes
+	React.useEffect(() => {
+		setIsInitialLoad(true);
+		pdfDocumentRef.current = null;
+	}, [url]);
 
 	return (
         <div className="relative w-full h-full flex items-center justify-center bg-white">
