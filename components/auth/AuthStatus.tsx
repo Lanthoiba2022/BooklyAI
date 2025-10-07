@@ -83,6 +83,7 @@ export function AuthStatus() {
               await supabaseBrowser?.auth.signOut();
               // Force clear local session to avoid stale UI in other listeners
               try { localStorage.removeItem("sb-bookly-auth"); } catch {}
+              try { document.cookie = `bookly_auth=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
             } catch (error) {
               console.error("Error signing out:", error);
             } finally {

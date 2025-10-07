@@ -236,28 +236,7 @@ export function FilesPanel() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="p-4 border-b flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Your PDFs</h1>
-          <Button variant="ghost" size="icon" onClick={() => setCenterView("chat")} className="h-8 w-8">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="p-4 flex flex-col items-center justify-center space-y-4">
-          <div className="text-center">
-            <div className="text-4xl mb-4">🔒</div>
-            <div className="text-lg font-medium text-zinc-700">Authentication Required</div>
-            <div className="text-sm text-zinc-500">Please sign in to view and manage your PDFs</div>
-          </div>
-          <a href="/signin">
-            <Button>Sign In</Button>
-          </a>
-        </div>
-      </div>
-    );
-  }
+  // Removed explicit unauthenticated UI since auth is enforced globally by middleware
 
   return (
     <div className="h-full flex flex-col">
