@@ -40,34 +40,16 @@ export function FilesPanel() {
     }
   };
 
-  const getValidToken = async (): Promise<string | null> => {
-    if (!supabaseBrowser) return null;
-    let { data: { session } } = await supabaseBrowser.auth.getSession();
-    if (session?.access_token) return session.access_token;
-    try {
-      await supabaseBrowser.auth.refreshSession();
-      ({ data: { session } } = await supabaseBrowser.auth.getSession());
-      return session?.access_token ?? null;
-    } catch {
-      return null;
-    }
-  };
+  // Cookies carry Supabase session; no need to manage/forward tokens
 
   const refresh = async () => {
     if (!supabaseBrowser) return [] as FileItem[];
     setIsFetching(true);
     try {
-      let token = await getValidToken();
-      if (!token) {
-        console.warn("No authentication token available after refresh attempt");
-        return [] as FileItem[];
-      }
-      let res = await fetch("/api/pdf/list", { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.status === 401) {
+      let res = await fetch("/api/pdf/list", { credentials: 'include' });
+      if (res.status === 401 && supabaseBrowser) {
         await supabaseBrowser.auth.refreshSession();
-        token = (await supabaseBrowser.auth.getSession()).data.session?.access_token ?? null;
-        if (!token) return [] as FileItem[];
-        res = await fetch("/api/pdf/list", { headers: { 'Authorization': `Bearer ${token}` } });
+        res = await fetch("/api/pdf/list", { credentials: 'include' });
       }
       if (res.ok) {
         const data = await res.json();
@@ -130,24 +112,19 @@ export function FilesPanel() {
     if (!file || !supabaseBrowser) return;
     setUploading(true);
     try {
-      let token = await getValidToken();
-      if (!token) return;
-
       const form = new FormData();
       form.append("file", file);
       let res = await fetch("/api/pdf", {
         method: "POST",
         body: form,
-        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
       });
-      if (res.status === 401) {
+      if (res.status === 401 && supabaseBrowser) {
         await supabaseBrowser.auth.refreshSession();
-        token = (await supabaseBrowser.auth.getSession()).data.session?.access_token ?? null;
-        if (!token) return;
         const retry = await fetch("/api/pdf", {
           method: "POST",
           body: form,
-          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
         });
         if (!retry.ok) return;
         const uploadData = await retry.json();
@@ -190,20 +167,18 @@ export function FilesPanel() {
     const confirmDelete = window.confirm("Delete this PDF permanently?");
     if (!confirmDelete) return;
     try {
-      let token = await getValidToken();
-      if (!token) return;
       let res = await fetch("/api/pdf", {
         method: "DELETE",
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ path })
       });
-      if (res.status === 401) {
+      if (res.status === 401 && supabaseBrowser) {
         await supabaseBrowser.auth.refreshSession();
-        token = (await supabaseBrowser.auth.getSession()).data.session?.access_token ?? null;
-        if (!token) return;
         const retry = await fetch("/api/pdf", {
           method: "DELETE",
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ path })
         });
         if (!retry.ok) return;

@@ -1,4 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { getPublicEnv } from "@/lib/env";
 
 // Public routes that do not require authentication
 const PUBLIC_PATHS = [
@@ -31,17 +33,31 @@ export function middleware(req: NextRequest) {
 		return NextResponse.next();
 	}
 
-	// Check lightweight auth cookie set by client after Supabase login
-	const hasAuthCookie = Boolean(req.cookies.get("bookly_auth")?.value);
+	// Validate Supabase session via HttpOnly cookies
+	const res = NextResponse.next();
+	const { supabaseUrl, supabaseAnonKey } = getPublicEnv();
+	if (!supabaseUrl || !supabaseAnonKey) return res;
 
-	if (!hasAuthCookie) {
-		const signInUrl = new URL("/signin", req.url);
-		// Preserve intended destination
-		signInUrl.searchParams.set("redirect", pathname);
-		return NextResponse.redirect(signInUrl);
-	}
+	const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+		cookies: {
+			get: (name: string) => req.cookies.get(name)?.value,
+			set: (name: string, value: string, options: any) => {
+				res.cookies.set({ name, value, ...options });
+			},
+			remove: (name: string, options: any) => {
+				res.cookies.set({ name, value: "", ...options, maxAge: 0 });
+			},
+		},
+	});
 
-	return NextResponse.next();
+	return supabase.auth.getUser().then(({ data }) => {
+		if (!data.user) {
+			const signInUrl = new URL("/signin", req.url);
+			signInUrl.searchParams.set("redirect", pathname);
+			return NextResponse.redirect(signInUrl);
+		}
+		return res;
+	}).catch(() => res);
 }
 
 export const config = {
