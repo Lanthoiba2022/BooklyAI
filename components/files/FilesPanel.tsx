@@ -6,10 +6,12 @@ import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
 import { X, Trash2 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
+import { useAuthStore } from "@/store/auth";
 
 type FileItem = { name: string; id: string; path: string; url?: string };
 
 export function FilesPanel() {
+  const { user } = useAuthStore();
   const [files, setFiles] = React.useState<FileItem[]>([]);
   const [uploading, setUploading] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -78,6 +80,16 @@ export function FilesPanel() {
       setIsFetching(false);
     }
   };
+
+  React.useEffect(() => {
+    // Sync with global auth store for immediate UI updates after OAuth
+    setIsAuthenticated(!!user);
+    setIsCheckingAuth(false);
+    if (user) {
+      // Immediately load files once user appears
+      refresh();
+    }
+  }, [user]);
 
   React.useEffect(() => {
     checkAuth();
@@ -245,7 +257,7 @@ export function FilesPanel() {
             <div className="text-lg font-medium text-zinc-700">Authentication Required</div>
             <div className="text-sm text-zinc-500">Please sign in to view and manage your PDFs</div>
           </div>
-          <a href="/login">
+          <a href="/signin">
             <Button>Sign In</Button>
           </a>
         </div>

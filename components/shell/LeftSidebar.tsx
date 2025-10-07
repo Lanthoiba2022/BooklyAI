@@ -5,11 +5,19 @@ import { AuthStatus } from "@/components/auth/AuthStatus";
 import { useUiStore } from "@/store/ui";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import * as React from "react";
+import { useAuthStore } from "@/store/auth";
 
 export function LeftSidebar() {
   const { setCenterView } = useUiStore();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
+  const { user } = useAuthStore();
+
+  // React immediately to global auth changes
+  React.useEffect(() => {
+    setIsAuthenticated(!!user);
+    setIsCheckingAuth(false);
+  }, [user]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
