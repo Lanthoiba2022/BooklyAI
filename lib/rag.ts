@@ -13,8 +13,16 @@ export async function embedText(text: string): Promise<number[] | null> {
       taskType: 'QUESTION_ANSWERING',
     });
     const embedding: number[] | undefined = (result as any)?.embedding?.values;
-    return Array.isArray(embedding) ? embedding : null;
-  } catch {
+    if (Array.isArray(embedding)) {
+      console.log("[RAG] embedText: embedding dimensions", embedding.length);
+      // Truncate to 768 dimensions to match database schema
+      const truncatedEmbedding = embedding.slice(0, 768);
+      console.log("[RAG] embedText: truncated to", truncatedEmbedding.length, "dimensions");
+      return truncatedEmbedding;
+    }
+    return null;
+  } catch (error) {
+    console.error("[RAG] embedText: error", error);
     return null;
   }
 }

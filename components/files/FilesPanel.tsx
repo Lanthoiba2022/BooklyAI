@@ -158,6 +158,21 @@ export function FilesPanel() {
     return () => clearTimeout(timeout);
   }, []);
 
+  // Auto-refresh files list to show processing status updates
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const interval = setInterval(() => {
+      // Only refresh if there are files with processing status
+      const hasProcessingFiles = files.some(f => f.status === 'processing' || f.status === 'pending');
+      if (hasProcessingFiles) {
+        refresh();
+      }
+    }, 3000); // Check every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, files]);
+
   // Removed redundant fetch on isAuthenticated changes to avoid duplicate GETs
 
   const onUpload = async (file?: File) => {
@@ -335,8 +350,15 @@ export function FilesPanel() {
                 <div className="text-sm truncate" title={f.name}>{f.name}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                   {f.status ? (
-                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded", f.status === 'ready' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>
-                      {f.status}
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                      f.status === 'ready' ? 'bg-green-100 text-green-700' : 
+                      f.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                      f.status === 'partial' ? 'bg-orange-100 text-orange-700' :
+                      f.status === 'failed' ? 'bg-red-100 text-red-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    )}>
+                      {f.status === 'processing' ? 'Processing...' : f.status}
                     </span>
                   ) : null}
                   <span className="text-xs text-primary">Open</span>
