@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getAuthenticatedUserFromCookies } from "@/lib/auth-server";
+import { ensureUserProvisioned } from "@/lib/user";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs"; // ensure Node for file processing
@@ -11,6 +12,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
+
+  // Ensure a corresponding row exists in our users table
+  await ensureUserProvisioned(user as any);
 
   const formData = await req.formData();
   const file = formData.get("file");
@@ -64,8 +68,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
-  // TODO: insert `pdfs` row and enqueue extraction (Phase 2)
-  const res = NextResponse.json({ ok: true, path: uploadData?.path });
+  // Insert `pdfs` row and enqueue extraction
+  const dbUser = await ensureUserProvisioned(user as any);
+  let pdfId: number | null = null;
+  if (dbUser) {
+    const { data: inserted, error: insErr } = await supabaseServer
+      .from("pdfs")
+      .insert({
+        owner_id: dbUser.id,
+        name: originalName,
+        storage_path: uploadData?.path ?? path,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+    if (!insErr) {
+      pdfId = inserted?.id ?? null;
+    }
+  }
+
+  // Fire-and-forget processing trigger
+  try {
+    if (pdfId) {
+      fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/api/pdf/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfId }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+  } catch {}
+
+  const res = NextResponse.json({ ok: true, path: uploadData?.path, pdfId });
   // Propagate any updated auth cookies (e.g., refresh) from Supabase SSR
   headers.forEach((v, k) => res.headers.append(k, v));
   return res;
