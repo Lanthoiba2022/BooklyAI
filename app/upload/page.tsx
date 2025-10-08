@@ -35,12 +35,12 @@ export default function UploadPage() {
       setMessage("Authentication required");
       return;
     }
-    let res = await fetch("/api/pdf", { method: "POST", body: form, headers: { 'Authorization': `Bearer ${token}` } });
+    let res = await fetch("/api/pdf", { method: "POST", body: form, headers: { 'Authorization': `Bearer ${token}` }, credentials: 'include' });
     if (res.status === 401) {
       try { await supabaseBrowser?.auth.refreshSession(); } catch {}
       token = await getAccessToken();
       if (!token) { setUploading(false); setMessage("Authentication required"); return; }
-      res = await fetch("/api/pdf", { method: "POST", body: form, headers: { 'Authorization': `Bearer ${token}` } });
+      res = await fetch("/api/pdf", { method: "POST", body: form, headers: { 'Authorization': `Bearer ${token}` }, credentials: 'include' });
     }
     const data = await res.json().catch(() => ({}));
     setUploading(false);
@@ -49,6 +49,29 @@ export default function UploadPage() {
       return;
     }
     setMessage("Uploaded and queued for processing.");
+
+    // Poll processing status if we have a pdfId
+    if (data.pdfId) {
+      try {
+        const poll = async () => {
+          for (let i = 0; i < 30; i++) { // up to ~60s
+            const res = await fetch(`/api/pdf/status?pdfId=${data.pdfId}`, { credentials: 'include' });
+            if (res.ok) {
+              const s = await res.json();
+              if (s.status === 'ready') return s;
+            }
+            await new Promise(r => setTimeout(r, 2000));
+          }
+          return null;
+        };
+        const status = await poll();
+        if (status?.status === 'ready') {
+          setMessage("Processing complete. PDF is ready.");
+        } else {
+          setMessage("Still processing. It will appear shortly.");
+        }
+      } catch {}
+    }
     
     // If upload was successful and we have a path, set it as current PDF
     if (data.path && supabaseBrowser) {
@@ -70,6 +93,7 @@ export default function UploadPage() {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
+            credentials: 'include',
           });
           
           if (filesRes.ok) {

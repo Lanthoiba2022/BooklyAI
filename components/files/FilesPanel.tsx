@@ -8,7 +8,7 @@ import { X, Trash2 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/auth";
 
-type FileItem = { name: string; id: string; path: string; url?: string };
+type FileItem = { name: string; id: string; path: string; url?: string; status?: string | null; pageCount?: number | null };
 
 export function FilesPanel() {
   const { user } = useAuthStore();
@@ -269,12 +269,20 @@ export function FilesPanel() {
               <button
                 className="flex-1 text-left min-w-0"
                 onClick={() => {
-                  setCurrent({ id: null, publicId: null, name: f.name, url: f.url ?? null, currentPage: 1, totalPages: null });
+                  if (f.status && f.status !== 'ready') return;
+                  setCurrent({ id: null, publicId: null, name: f.name, url: f.url ?? null, currentPage: 1, totalPages: f.pageCount ?? null });
                   setRightPanelOpen(true);
                 }}
               >
                 <div className="text-sm truncate" title={f.name}>{f.name}</div>
-                <span className="text-xs text-primary">Open</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {f.status ? (
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded", f.status === 'ready' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>
+                      {f.status}
+                    </span>
+                  ) : null}
+                  <span className="text-xs text-primary">Open</span>
+                </div>
               </button>
               <div className="shrink-0 pl-2">
                 <button
