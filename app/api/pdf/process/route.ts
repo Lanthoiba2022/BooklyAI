@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import pdfParse from "pdf-parse";
+// Import pdf-parse dynamically at runtime to avoid bundling issues and any
+// accidental file system access during build.
+let pdfParse: (data: Buffer) => Promise<{ text: string }>; 
 import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 
@@ -38,6 +40,12 @@ export async function POST(req: NextRequest) {
   if (!openaiApiKey) return NextResponse.json({ error: "OPENAI_API_KEY missing" }, { status: 500 });
 
   try {
+    if (!pdfParse) {
+      const mod = await import("pdf-parse");
+      // default export contains the function
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      pdfParse = (mod as any).default ?? (mod as any);
+    }
     const { pdfId } = await req.json();
     if (!pdfId || typeof pdfId !== 'number') {
       return NextResponse.json({ error: "Missing pdfId" }, { status: 400 });

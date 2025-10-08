@@ -18,7 +18,7 @@ export function FilesPanel() {
   const [dragActive, setDragActive] = React.useState(false);
   const { setCurrent } = usePdfStore();
   const { setRightPanelOpen, setCenterView } = useUiStore();
-  const [isFetching, setIsFetching] = React.useState(true);
+  const [isFetching, setIsFetching] = React.useState(false);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
   const hasFetchedRef = React.useRef(false);
@@ -32,6 +32,10 @@ export function FilesPanel() {
       const { data: { session } } = await supabaseBrowser.auth.getSession();
       if (session?.user) {
         setIsAuthenticated(true);
+        if (!hasFetchedRef.current) {
+          hasFetchedRef.current = true;
+          await refresh();
+        }
       }
     } catch (error) {
       console.error("Error checking auth:", error);
@@ -43,14 +47,35 @@ export function FilesPanel() {
   // Cookies carry Supabase session; no need to manage/forward tokens
 
   const refresh = async () => {
-    if (!supabaseBrowser) return [] as FileItem[];
+    if (!supabaseBrowser) {
+      setIsFetching(false);
+      return [] as FileItem[];
+    }
     setIsFetching(true);
     try {
-      let res = await fetch("/api/pdf/list", { credentials: 'include' });
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 8000);
+      let res = await fetch("/api/pdf/list", { credentials: 'include', signal: controller.signal });
       if (res.status === 401 && supabaseBrowser) {
+        // Try to resync cookies from the current session tokens, then retry
+        const { data: { session } } = await supabaseBrowser.auth.getSession();
+        if (session?.access_token && session?.refresh_token) {
+          try {
+            await fetch("/api/auth/sync", {
+              method: "POST",
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ access_token: session.access_token, refresh_token: session.refresh_token }),
+            });
+          } catch {}
+        }
         await supabaseBrowser.auth.refreshSession();
-        res = await fetch("/api/pdf/list", { credentials: 'include' });
+        const controller2 = new AbortController();
+        const t2 = setTimeout(() => controller2.abort(), 8000);
+        res = await fetch("/api/pdf/list", { credentials: 'include', signal: controller2.signal });
+        clearTimeout(t2);
       }
+      clearTimeout(t);
       if (res.ok) {
         const data = await res.json();
         setFiles(data.files ?? []);
@@ -64,6 +89,16 @@ export function FilesPanel() {
     } finally {
       setIsFetching(false);
     }
+  };
+
+  const pollForUploadedUrl = async (expectedPath: string, attempts = 12, delayMs = 500) => {
+    for (let i = 0; i < attempts; i++) {
+      const latest = await refresh();
+      const f = latest.find((x: any) => x.path === expectedPath);
+      if (f?.url) return f;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return null as any;
   };
 
   React.useEffect(() => {
@@ -128,28 +163,22 @@ export function FilesPanel() {
         });
         if (!retry.ok) return;
         const uploadData = await retry.json();
-        const updatedFiles = await refresh();
-        if (uploadData.path && updatedFiles.length > 0) {
-          const uploadedFile = updatedFiles.find((f: any) => f.path === uploadData.path);
+        if (uploadData.path) {
+          const uploadedFile = await pollForUploadedUrl(uploadData.path);
           if (uploadedFile?.url) {
-            console.log("Setting PDF as current from FilesPanel:", file.name, uploadedFile.url);
-            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: null });
+            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
             setRightPanelOpen(true);
-            console.log("PDF set as current from FilesPanel and right panel opened");
           }
         }
         return;
       }
       if (res.ok) {
         const uploadData = await res.json();
-        const updatedFiles = await refresh();
-        if (uploadData.path && updatedFiles.length > 0) {
-          const uploadedFile = updatedFiles.find((f: any) => f.path === uploadData.path);
+        if (uploadData.path) {
+          const uploadedFile = await pollForUploadedUrl(uploadData.path);
           if (uploadedFile?.url) {
-            console.log("Setting PDF as current from FilesPanel:", file.name, uploadedFile.url);
-            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: null });
+            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
             setRightPanelOpen(true);
-            console.log("PDF set as current from FilesPanel and right panel opened");
           }
         }
       } else {
@@ -269,7 +298,7 @@ export function FilesPanel() {
               <button
                 className="flex-1 text-left min-w-0"
                 onClick={() => {
-                  if (f.status && f.status !== 'ready') return;
+                  // Allow opening while processing; viewer uses signed URL
                   setCurrent({ id: null, publicId: null, name: f.name, url: f.url ?? null, currentPage: 1, totalPages: f.pageCount ?? null });
                   setRightPanelOpen(true);
                 }}
