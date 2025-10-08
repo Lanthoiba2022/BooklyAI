@@ -7,6 +7,8 @@ import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
 import { useAuthStore } from "@/store/auth";
 import { useChatStore } from "@/store/chat";
+import { YouTubeRecommendations, YouTubeRecommendationsCompact } from "@/components/youtube/YouTubeRecommendations";
+import { YouTubeRecommendationsLoader as CompactLoader } from "@/components/youtube/YouTubeRecommendationsLoader";
 
 // Custom hook for auto-resizing textarea
 function useAutoResizeTextarea() {
@@ -34,6 +36,9 @@ function useAutoResizeTextarea() {
 export function CenterChat() {
   const [value, setValue] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
+  const [youtubeVideos, setYoutubeVideos] = React.useState<any[]>([]);
+  const [youtubeTopics, setYoutubeTopics] = React.useState<string[]>([]);
+  const [loadingYoutube, setLoadingYoutube] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -42,6 +47,32 @@ export function CenterChat() {
   const { setRightPanelOpen, rightPanelOpen } = useUiStore();
   const { user } = useAuthStore();
   const { chatId, setChatId, messages, addMessage, startAssistantMessage, appendAssistantDelta, setAssistantCitations } = useChatStore();
+
+  // Fetch YouTube recommendations
+  const fetchYouTubeRecommendations = async (pdfId?: number, currentQuestion?: string) => {
+    if (!isAuthenticated) return;
+    
+    setLoadingYoutube(true);
+    try {
+      const params = new URLSearchParams();
+      if (pdfId) params.append('pdfId', pdfId.toString());
+      if (currentQuestion) params.append('currentQuestion', currentQuestion);
+      
+      const res = await fetch(`/api/youtube?${params}`, {
+        credentials: 'include',
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setYoutubeVideos(data.recommendations || []);
+        setYoutubeTopics(data.topics || []);
+      }
+    } catch (error) {
+      console.error('Error fetching YouTube recommendations:', error);
+    } finally {
+      setLoadingYoutube(false);
+    }
+  };
 
   const handleValueChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -64,6 +95,13 @@ export function CenterChat() {
     setIsAuthenticated(!!user);
     setIsCheckingAuth(false);
   }, [user]);
+
+  // Fetch YouTube recommendations when PDF is selected
+  React.useEffect(() => {
+    if (current?.id && isAuthenticated) {
+      fetchYouTubeRecommendations(current.id);
+    }
+  }, [current?.id, isAuthenticated]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
@@ -168,6 +206,25 @@ export function CenterChat() {
             </div>
           ))
         )}
+        
+        {/* YouTube Recommendations */}
+        {youtubeVideos.length > 0 && (
+          <div className="mt-4">
+            <YouTubeRecommendationsCompact 
+              videos={youtubeVideos}
+              onVideoClick={(videoId) => {
+                window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+              }}
+            />
+          </div>
+        )}
+        
+        {/* YouTube Loading State */}
+        {loadingYoutube && (
+          <div className="mt-4">
+            <CompactLoader />
+          </div>
+        )}
       </div>
       <div className="border-t p-3">
         <form
@@ -212,7 +269,8 @@ export function CenterChat() {
                       } else if (msg.type === 'delta') {
                         appendAssistantDelta(msg.data || '');
                       } else if (msg.type === 'done') {
-                        // no-op
+                        // Fetch YouTube recommendations after assistant is done
+                        fetchYouTubeRecommendations(current?.id ?? undefined, content);
                       } else if (msg.type === 'error') {
                         appendAssistantDelta(`\n[Error] ${msg.data}`);
                       } else if (msg.type === 'chat') {
