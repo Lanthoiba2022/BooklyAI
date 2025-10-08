@@ -6,8 +6,10 @@ import { ensureUserProvisioned } from "@/lib/user";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  console.log("[API] /api/pdf/list GET: start");
   // Get authenticated user
   const { user, headers } = await getAuthenticatedUserFromCookies(req);
+  console.log("[API] /api/pdf/list GET: user", !!user, user?.id);
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
@@ -26,6 +28,7 @@ export async function GET(req: NextRequest) {
       throw new Error("Invalid user folder access");
     }
 
+    console.log("[API] /api/pdf/list GET: list storage", userFolder);
     const { data: storageList, error: listErr } = await supabaseServer.storage.from("pdfs").list(userFolder, { limit: 100, offset: 0, sortBy: { column: "name", order: "desc" } });
     if (listErr) throw listErr;
 
@@ -45,12 +48,14 @@ export async function GET(req: NextRequest) {
     if (paths.length > 0) {
       try {
         // @ts-ignore supabase-js v2 supports createSignedUrls
+        console.log("[API] /api/pdf/list GET: batch signed URLs", paths.length);
         const { data: signedBatch } = await supabaseServer.storage.from("pdfs").createSignedUrls(paths, 60 * 60);
         (signedBatch ?? []).forEach((entry: any, idx: number) => {
           signedUrlMap.set(paths[idx]!, entry?.signedUrl);
         });
       } catch {
         // Fallback to per-file signed URLs on failure
+        console.warn("[API] /api/pdf/list GET: batch failed, fallback per-file");
         for (const p of paths) {
           try {
             const { data } = await supabaseServer.storage.from("pdfs").createSignedUrl(p, 60 * 60);
@@ -75,11 +80,12 @@ export async function GET(req: NextRequest) {
         pageCount: meta.page_count,
       };
     });
+    console.log("[API] /api/pdf/list GET: files built", files.length);
     const res = NextResponse.json({ files });
     headers.forEach((v, k) => res.headers.append(k, v));
     return res;
   } catch (e) {
-    console.error("Error listing user files:", e);
+    console.error("[API] /api/pdf/list GET: error", (e as any)?.message || e);
     return NextResponse.json({ files: [] });
   }
 }

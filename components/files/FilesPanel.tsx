@@ -24,22 +24,27 @@ export function FilesPanel() {
   const hasFetchedRef = React.useRef(false);
 
   const checkAuth = async () => {
+    console.log("[FilesPanel] checkAuth: start");
     if (!supabaseBrowser) {
+      console.warn("[FilesPanel] checkAuth: supabaseBrowser undefined");
       setIsCheckingAuth(false);
       return;
     }
     try {
       const { data: { session } } = await supabaseBrowser.auth.getSession();
+      console.log("[FilesPanel] checkAuth: session", !!session, session?.user?.id);
       if (session?.user) {
         setIsAuthenticated(true);
         if (!hasFetchedRef.current) {
+          console.log("[FilesPanel] checkAuth: first refresh()");
           hasFetchedRef.current = true;
           await refresh();
         }
       }
     } catch (error) {
-      console.error("Error checking auth:", error);
+      console.error("[FilesPanel] checkAuth: error", error);
     } finally {
+      console.log("[FilesPanel] checkAuth: done");
       setIsCheckingAuth(false);
     }
   };
@@ -47,20 +52,27 @@ export function FilesPanel() {
   // Cookies carry Supabase session; no need to manage/forward tokens
 
   const refresh = async () => {
+    console.log("[FilesPanel] refresh: start");
     if (!supabaseBrowser) {
+      console.warn("[FilesPanel] refresh: supabaseBrowser undefined");
       setIsFetching(false);
       return [] as FileItem[];
     }
     setIsFetching(true);
     try {
+      console.log("[FilesPanel] refresh: GET /api/pdf/list");
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 8000);
       let res = await fetch("/api/pdf/list", { credentials: 'include', signal: controller.signal });
+      console.log("[FilesPanel] refresh: status", res.status);
       if (res.status === 401 && supabaseBrowser) {
+        console.warn("[FilesPanel] refresh: 401 -> sync & refresh");
         // Try to resync cookies from the current session tokens, then retry
         const { data: { session } } = await supabaseBrowser.auth.getSession();
+        console.log("[FilesPanel] refresh: have session?", !!session);
         if (session?.access_token && session?.refresh_token) {
           try {
+            console.log("[FilesPanel] refresh: POST /api/auth/sync");
             await fetch("/api/auth/sync", {
               method: "POST",
               headers: { 'Content-Type': 'application/json' },
@@ -69,24 +81,29 @@ export function FilesPanel() {
             });
           } catch {}
         }
+        console.log("[FilesPanel] refresh: supabase.auth.refreshSession()");
         await supabaseBrowser.auth.refreshSession();
+        console.log("[FilesPanel] refresh: retry GET /api/pdf/list");
         const controller2 = new AbortController();
         const t2 = setTimeout(() => controller2.abort(), 8000);
         res = await fetch("/api/pdf/list", { credentials: 'include', signal: controller2.signal });
+        console.log("[FilesPanel] refresh: retry status", res.status);
         clearTimeout(t2);
       }
       clearTimeout(t);
       if (res.ok) {
         const data = await res.json();
+        console.log("[FilesPanel] refresh: files", (data.files ?? []).length);
         setFiles(data.files ?? []);
         return data.files ?? [];
       }
-      console.error("Failed to fetch PDFs:", res.statusText);
+      console.error("[FilesPanel] refresh: failed", res.status, res.statusText);
       return [] as FileItem[];
     } catch (error) {
-      console.error("Error fetching PDFs:", error);
+      console.error("[FilesPanel] refresh: error", error);
       return [] as FileItem[];
     } finally {
+      console.log("[FilesPanel] refresh: done");
       setIsFetching(false);
     }
   };
@@ -147,25 +164,33 @@ export function FilesPanel() {
     if (!file || !supabaseBrowser) return;
     setUploading(true);
     try {
+      console.log("[FilesPanel] onUpload: start", file.name, file.size);
       const form = new FormData();
       form.append("file", file);
+      console.log("[FilesPanel] onUpload: POST /api/pdf");
       let res = await fetch("/api/pdf", {
         method: "POST",
         body: form,
         credentials: 'include',
       });
+      console.log("[FilesPanel] onUpload: status", res.status);
       if (res.status === 401 && supabaseBrowser) {
+        console.warn("[FilesPanel] onUpload: 401 -> refresh & retry");
         await supabaseBrowser.auth.refreshSession();
         const retry = await fetch("/api/pdf", {
           method: "POST",
           body: form,
           credentials: 'include',
         });
+        console.log("[FilesPanel] onUpload: retry status", retry.status);
         if (!retry.ok) return;
         const uploadData = await retry.json();
+        console.log("[FilesPanel] onUpload: retry response", uploadData);
         if (uploadData.path) {
+          console.log("[FilesPanel] onUpload: pollForUploadedUrl", uploadData.path);
           const uploadedFile = await pollForUploadedUrl(uploadData.path);
           if (uploadedFile?.url) {
+            console.log("[FilesPanel] onUpload: setCurrent", uploadedFile.url);
             setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
             setRightPanelOpen(true);
           }
@@ -174,19 +199,23 @@ export function FilesPanel() {
       }
       if (res.ok) {
         const uploadData = await res.json();
+        console.log("[FilesPanel] onUpload: response", uploadData);
         if (uploadData.path) {
+          console.log("[FilesPanel] onUpload: pollForUploadedUrl", uploadData.path);
           const uploadedFile = await pollForUploadedUrl(uploadData.path);
           if (uploadedFile?.url) {
+            console.log("[FilesPanel] onUpload: setCurrent", uploadedFile.url);
             setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
             setRightPanelOpen(true);
           }
         }
       } else {
-        console.error("Upload failed:", res.statusText);
+        console.error("[FilesPanel] onUpload: failed", res.status, res.statusText);
       }
     } catch (error) {
-      console.error("Error uploading file:", error);
+      console.error("[FilesPanel] onUpload: error", error);
     } finally {
+      console.log("[FilesPanel] onUpload: done");
       setUploading(false);
     }
   };

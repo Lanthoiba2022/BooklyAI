@@ -7,8 +7,10 @@ import crypto from "node:crypto";
 export const runtime = "nodejs"; // ensure Node for file processing
 
 export async function POST(req: NextRequest) {
+  console.log("[API] /api/pdf POST: start");
   // Get authenticated user via cookie-based session
   const { user, headers } = await getAuthenticatedUserFromCookies(req);
+  console.log("[API] /api/pdf POST: user", !!user, user?.id);
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
@@ -61,10 +63,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid upload path" }, { status: 400 });
   }
 
+  console.log("[API] /api/pdf POST: upload to storage", path);
   const { data: uploadData, error: uploadError } = await supabaseServer.storage
     .from("pdfs")
     .upload(path, bytes, { contentType: "application/pdf", upsert: false });
   if (uploadError) {
+    console.error("[API] /api/pdf POST: upload error", uploadError.message);
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
@@ -72,6 +76,7 @@ export async function POST(req: NextRequest) {
   const dbUser = await ensureUserProvisioned(user as any);
   let pdfId: number | null = null;
   if (dbUser) {
+    console.log("[API] /api/pdf POST: insert pdf row");
     const { data: inserted, error: insErr } = await supabaseServer
       .from("pdfs")
       .insert({
@@ -82,6 +87,7 @@ export async function POST(req: NextRequest) {
       })
       .select("id")
       .single();
+    if (insErr) console.error("[API] /api/pdf POST: insert error", insErr.message);
     if (!insErr) {
       pdfId = inserted?.id ?? null;
     }
@@ -90,12 +96,16 @@ export async function POST(req: NextRequest) {
   // Fire-and-forget processing trigger
   try {
     if (pdfId) {
-      fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/api/pdf/process`, {
+      const proto = req.headers.get('x-forwarded-proto') ?? 'http';
+      const host = req.headers.get('host') ?? '';
+      const base = process.env.NEXT_PUBLIC_BASE_URL || `${proto}://${host}`;
+      console.log("[API] /api/pdf POST: trigger process", { pdfId, base });
+      fetch(`${base}/api/pdf/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfId }),
         keepalive: true,
-      }).catch(() => {});
+      }).catch((e) => { console.error("[API] /api/pdf POST: trigger error", e?.message); });
     }
   } catch {}
 
