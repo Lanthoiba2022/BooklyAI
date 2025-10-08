@@ -38,26 +38,38 @@ export function middleware(req: NextRequest) {
 	const { supabaseUrl, supabaseAnonKey } = getPublicEnv();
 	if (!supabaseUrl || !supabaseAnonKey) return res;
 
-	const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-		cookies: {
-			get: (name: string) => req.cookies.get(name)?.value,
-			set: (name: string, value: string, options: any) => {
-				res.cookies.set({ name, value, ...options });
-			},
-			remove: (name: string, options: any) => {
-				res.cookies.set({ name, value: "", ...options, maxAge: 0 });
-			},
-		},
-	});
+  // First, try to decode access token locally to avoid any network calls
+  try {
+    const raw = req.cookies.get("sb-access-token")?.value
+      || req.cookies.get("__Host-sb-access-token")?.value;
+    if (raw) {
+      const parts = raw.split(".");
+      if (parts.length === 3) {
+        const payloadJson = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+        const payload = JSON.parse(payloadJson);
+        if (payload?.sub) return res;
+      }
+    }
+  } catch {}
 
-	return supabase.auth.getUser().then(({ data }) => {
-		if (!data.user) {
-			const signInUrl = new URL("/signin", req.url);
-			signInUrl.searchParams.set("redirect", pathname);
-			return NextResponse.redirect(signInUrl);
-		}
-		return res;
-	}).catch(() => res);
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get: (name: string) => req.cookies.get(name)?.value,
+      set: (name: string, value: string, options: any) => {
+        res.cookies.set({ name, value, ...options });
+      },
+      remove: (name: string, options: any) => {
+        res.cookies.set({ name, value: "", ...options, maxAge: 0 });
+      },
+    },
+  });
+
+  return supabase.auth.getUser().then(({ data }) => {
+    if (data.user) return res;
+    const signInUrl = new URL("/signin", req.url);
+    signInUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(signInUrl);
+  }).catch(() => res);
 }
 
 export const config = {

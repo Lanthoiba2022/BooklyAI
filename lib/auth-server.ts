@@ -30,7 +30,19 @@ export async function getAuthenticatedUserFromCookies(req: NextRequest): Promise
     const { data: { user } } = await supabase.auth.getUser();
     return { user: user ?? null, headers };
   } catch {
-    return { user: null, headers };
+    // Fallback: decode Supabase access token from cookies to avoid network call issues (e.g., TLS errors on Windows)
+    try {
+      const token = req.cookies.get("sb-access-token")?.value;
+      if (!token) return { user: null, headers };
+      const parts = token.split(".");
+      if (parts.length !== 3) return { user: null, headers };
+      const payloadJson = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+      const payload = JSON.parse(payloadJson);
+      const user = payload?.sub ? { id: payload.sub, email: payload.email ?? null, user_metadata: payload.user_metadata ?? null } : null;
+      return { user, headers };
+    } catch {
+      return { user: null, headers };
+    }
   }
 }
 

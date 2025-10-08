@@ -40,21 +40,41 @@ export async function GET(req: NextRequest) {
       (pdfRows ?? []).forEach(r => metadataMap.set(r.storage_path, { status: r.status ?? null, page_count: r.page_count ?? null }));
     }
 
-    const files = await Promise.all(
-      (storageList ?? []).map(async (f) => {
-        const path = `${userFolder}/${f.name}`;
-        const { data: urlData } = await supabaseServer.storage.from("pdfs").createSignedUrl(path, 60 * 60);
-        const meta = metadataMap.get(path) ?? { status: null, page_count: null };
-        return {
-          id: path,
-          name: f.name.replace(/^\d+_/, ""),
-          path,
-          url: urlData?.signedUrl,
-          status: meta.status,
-          pageCount: meta.page_count,
-        };
-      })
-    );
+    // Batch-generate signed URLs to avoid N parallel calls and reduce latency
+    let signedUrlMap = new Map<string, string | undefined>();
+    if (paths.length > 0) {
+      try {
+        // @ts-ignore supabase-js v2 supports createSignedUrls
+        const { data: signedBatch } = await supabaseServer.storage.from("pdfs").createSignedUrls(paths, 60 * 60);
+        (signedBatch ?? []).forEach((entry: any, idx: number) => {
+          signedUrlMap.set(paths[idx]!, entry?.signedUrl);
+        });
+      } catch {
+        // Fallback to per-file signed URLs on failure
+        for (const p of paths) {
+          try {
+            const { data } = await supabaseServer.storage.from("pdfs").createSignedUrl(p, 60 * 60);
+            signedUrlMap.set(p, data?.signedUrl);
+          } catch {
+            signedUrlMap.set(p, undefined);
+          }
+        }
+      }
+    }
+
+    // Construct response quickly; do not block on any stragglers
+    const files = (storageList ?? []).map((f) => {
+      const path = `${userFolder}/${f.name}`;
+      const meta = metadataMap.get(path) ?? { status: null, page_count: null };
+      return {
+        id: path,
+        name: f.name.replace(/^\d+_/, ""),
+        path,
+        url: signedUrlMap.get(path),
+        status: meta.status,
+        pageCount: meta.page_count,
+      };
+    });
     const res = NextResponse.json({ files });
     headers.forEach((v, k) => res.headers.append(k, v));
     return res;
