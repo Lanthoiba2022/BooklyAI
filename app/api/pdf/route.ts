@@ -93,21 +93,42 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fire-and-forget processing trigger
+  // Fire-and-forget processing trigger with better error handling
   try {
     if (pdfId) {
       const proto = req.headers.get('x-forwarded-proto') ?? 'http';
       const host = req.headers.get('host') ?? '';
       const base = process.env.NEXT_PUBLIC_BASE_URL || `${proto}://${host}`;
       console.log("[API] /api/pdf POST: trigger process", { pdfId, base });
-      fetch(`${base}/api/pdf/process`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfId }),
-        keepalive: true,
-      }).catch((e) => { console.error("[API] /api/pdf POST: trigger error", e?.message); });
+      
+      // Use setTimeout to ensure the response is sent before processing starts
+      setTimeout(async () => {
+        try {
+          const processRes = await fetch(`${base}/api/pdf/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdfId }),
+          });
+          
+          if (!processRes.ok) {
+            const errorText = await processRes.text();
+            console.error("[API] /api/pdf POST: processing failed", processRes.status, errorText);
+            // Update status to failed if processing fails
+            await supabaseServer?.from('pdfs').update({ status: 'failed' }).eq('id', pdfId);
+          } else {
+            const result = await processRes.json();
+            console.log("[API] /api/pdf POST: processing completed", result);
+          }
+        } catch (e: any) {
+          console.error("[API] /api/pdf POST: processing error", e?.message);
+          // Update status to failed if processing fails
+          await supabaseServer?.from('pdfs').update({ status: 'failed' }).eq('id', pdfId);
+        }
+      }, 100); // Small delay to ensure response is sent first
     }
-  } catch {}
+  } catch (e: any) {
+    console.error("[API] /api/pdf POST: trigger setup error", e?.message);
+  }
 
   const res = NextResponse.json({ ok: true, path: uploadData?.path, pdfId });
   // Propagate any updated auth cookies (e.g., refresh) from Supabase SSR

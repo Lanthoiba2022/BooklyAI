@@ -88,10 +88,16 @@ export async function POST(req: NextRequest) {
         const embedding = await embedText(body.message);
         if (embedding) {
             const matches = (await searchChunks(body.pdfId, embedding, 5, 10)) as RetrievedChunk[];
-            const built = buildPromptFromChunks(body.message, matches);
-            system = built.system;
-            userPrompt = built.user;
-            citations = built.citations;
+            if (matches.length > 0) {
+                const built = buildPromptFromChunks(body.message, matches);
+                system = built.system;
+                userPrompt = built.user;
+                citations = built.citations;
+            } else {
+                // No matches found in PDF, but allow normal chat
+                system = "Use your knowledge to answer the question. If uncertain about specific details, say so briefly. Prefer citations if context is available.";
+                userPrompt = body.message;
+            }
         }
     }
 

@@ -6,12 +6,23 @@ import { useUiStore } from "@/store/ui";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import * as React from "react";
 import { useAuthStore } from "@/store/auth";
+import { useChatStore } from "@/store/chat";
+
+type ChatItem = {
+  id: number;
+  createdAt: string;
+  pdfName: string | null;
+  lastMessage: string | null;
+};
 
 export function LeftSidebar() {
   const { setCenterView } = useUiStore();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
+  const [chats, setChats] = React.useState<ChatItem[]>([]);
+  const [loadingChats, setLoadingChats] = React.useState(false);
   const { user } = useAuthStore();
+  const { setChatId, reset } = useChatStore();
 
   // React immediately to global auth changes
   React.useEffect(() => {
@@ -63,10 +74,58 @@ export function LeftSidebar() {
     return () => clearTimeout(timeout);
   }, []);
 
+  // Load chat history when authenticated
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      setChats([]);
+      return;
+    }
+
+    const loadChats = async () => {
+      setLoadingChats(true);
+      try {
+        const res = await fetch('/api/chats', {
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setChats(data.chats || []);
+        }
+      } catch (error) {
+        console.error('Error loading chats:', error);
+      } finally {
+        setLoadingChats(false);
+      }
+    };
+
+    loadChats();
+  }, [isAuthenticated]);
+
+  const handleNewChat = () => {
+    reset();
+    setCenterView("chat");
+  };
+
+  const handleChatClick = async (chatId: number) => {
+    try {
+      const res = await fetch(`/api/messages?chatId=${chatId}`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatId(chatId);
+        // TODO: Load messages into chat store
+        setCenterView("chat");
+      }
+    } catch (error) {
+      console.error('Error loading chat messages:', error);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 space-y-3 flex-1 overflow-y-auto">
-        <Button className="w-full">
+        <Button className="w-full" onClick={handleNewChat}>
           <Plus className="h-4 w-4 mr-2" /> New Chat
         </Button>
         <div className="space-y-1">
@@ -89,9 +148,32 @@ export function LeftSidebar() {
         <div className="space-y-1">
           <div className="text-xs font-medium text-zinc-500 px-1">Chat History</div>
           <div className="space-y-1">
-            <Button variant="ghost" className="w-full justify-start">
-              <History className="h-4 w-4 mr-2" /> Recent chat
-            </Button>
+            {loadingChats ? (
+              <div className="text-xs text-zinc-400 px-1">Loading...</div>
+            ) : chats.length === 0 ? (
+              <div className="text-xs text-zinc-400 px-1">No chats yet</div>
+            ) : (
+              chats.map((chat) => (
+                <Button 
+                  key={chat.id}
+                  variant="ghost" 
+                  className="w-full justify-start text-left h-auto py-2"
+                  onClick={() => handleChatClick(chat.id)}
+                >
+                  <History className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium truncate">
+                      {chat.pdfName ? `Chat about ${chat.pdfName}` : 'General Chat'}
+                    </div>
+                    {chat.lastMessage && (
+                      <div className="text-xs text-zinc-500 truncate">
+                        {chat.lastMessage}
+                      </div>
+                    )}
+                  </div>
+                </Button>
+              ))
+            )}
           </div>
         </div>
       </div>
