@@ -14,6 +14,8 @@ type PdfState = {
   current: PdfFile | null;
   setCurrent: (file: PdfFile | null) => void;
   setCurrentPage: (page: number) => void;
+  jumpToPage?: (pageZeroBased: number) => void;
+  setJumpToPage: (fn: ((pageZeroBased: number) => void) | undefined) => void;
 };
 
 export const usePdfStore = create<PdfState>((set, get) => ({
@@ -24,6 +26,8 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     if (!current) return;
     set({ current: { ...current, currentPage: page } });
   },
+  jumpToPage: undefined,
+  setJumpToPage: (fn) => set({ jumpToPage: fn }),
 }));
 
 

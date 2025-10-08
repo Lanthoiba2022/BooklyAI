@@ -3,7 +3,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 
-type FileItem = { name: string; id: string; path: string; url?: string };
+type FileItem = { name: string; id: string; path: string; url?: string; pdfId?: number | null };
 
 export default function FilesPage() {
   const [files, setFiles] = React.useState<FileItem[]>([]);

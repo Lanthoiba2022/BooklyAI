@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { usePdfStore } from "@/store/pdf";
 import { Viewer, Worker } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { toolbarPlugin } from '@react-pdf-viewer/toolbar';
@@ -61,6 +62,8 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
 
     const toolbarPluginInstance = toolbarPlugin();
     const searchPluginInstance = searchPlugin();
+    const { setJumpToPage } = usePdfStore();
+    const viewerRef = React.useRef<any>(null);
 
     // Function to update scale factor CSS variable
     const updateScaleFactor = (scale: number) => {
@@ -89,6 +92,20 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
         updateScaleFactor(1);
     }, [url]);
 
+    React.useEffect(() => {
+        // Expose a jumpToPage function that accepts 1-based page index
+        setJumpToPage?.((pageZeroBased: number) => {
+            try {
+                const pageIndexOneBased = Math.max(1, (pageZeroBased ?? 0) + 1);
+                // Use the viewer's internal API if available
+                const viewer = document.querySelector('.rpv-core__viewer');
+                // Fallback: dispatch custom event for plugins that support it
+                (viewerRef.current as any)?.jumpToPage?.(pageIndexOneBased - 1);
+            } catch {}
+        });
+        return () => setJumpToPage?.(undefined);
+    }, [setJumpToPage]);
+
     return (
         <div 
             ref={containerRef}
@@ -102,6 +119,7 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
                 <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
                     <div style={{ height: '100%' }}>
                         <Viewer
+                            ref={viewerRef as any}
                             fileUrl={url}
                             plugins={[
                                 defaultLayoutPluginInstance,

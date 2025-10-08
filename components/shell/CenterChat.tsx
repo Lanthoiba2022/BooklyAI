@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabaseClient";
 import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
 import { useAuthStore } from "@/store/auth";
+import { useChatStore } from "@/store/chat";
 
 // Custom hook for auto-resizing textarea
 function useAutoResizeTextarea() {
@@ -40,6 +41,7 @@ export function CenterChat() {
   const { setCurrent, current } = usePdfStore();
   const { setRightPanelOpen, rightPanelOpen } = useUiStore();
   const { user } = useAuthStore();
+  const { chatId, setChatId, messages, addMessage, startAssistantMessage, appendAssistantDelta, setAssistantCitations } = useChatStore();
 
   const handleValueChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -136,16 +138,93 @@ export function CenterChat() {
   return (
     <div className="h-full grid grid-rows-[1fr_auto]">
       <div className="p-4 space-y-3 overflow-y-auto">
-        <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
+        {messages.length === 0 ? (
+          <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} className="rounded-lg border bg-white p-3">
+              <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">{m.role}</div>
+              <div className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</div>
+              {m.role === "assistant" && Array.isArray(m.citations) && m.citations.length > 0 ? (
+                <div className="mt-2 border-t pt-2 space-y-1">
+                  {m.citations.map((c, i) => (
+                    <button key={i} className="text-xs text-primary underline" onClick={() => {
+                      // jump uses 0-based index
+                      try {
+                        const { jumpToPage } = usePdfStore.getState();
+                        if (typeof jumpToPage === 'function') {
+                          // c.page is 1-based from backend; ensure safe
+                          const p0 = Math.max(0, (c.page ?? 1) - 1);
+                          jumpToPage(p0);
+                          setRightPanelOpen(true);
+                        }
+                      } catch {}
+                    }}>
+                      (p. {c.page}) {c.text ? `— ${c.text.slice(0, 80)}…` : ''}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))
+        )}
       </div>
       <div className="border-t p-3">
         <form
           className="flex items-end justify-center"
           onSubmit={(e) => {
             e.preventDefault();
+            const content = value.trim();
+            if (!content) return;
+            // Allow chatting without a PDF; only pass pdfId if present
+            // Add user message locally
+            addMessage({ id: `${Date.now()}-user`, role: "user", content, createdAt: Date.now() });
             setValue("");
             // Reset textarea height after clearing value
             setTimeout(adjustHeight, 0);
+
+            // Start streaming from API
+            (async () => {
+              try {
+                startAssistantMessage();
+                const res = await fetch('/api/chat', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ chatId, pdfId: current?.id ?? undefined, message: content }),
+                });
+                if (!res.ok || !res.body) {
+                  appendAssistantDelta("(Failed to start chat)");
+                  return;
+                }
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                  const { value, done } = await reader.read();
+                  if (done) break;
+                  const chunk = decoder.decode(value, { stream: true });
+                  const lines = chunk.split('\n').filter(Boolean);
+                  for (const line of lines) {
+                    try {
+                      const msg = JSON.parse(line);
+                      if (msg.type === 'citations') {
+                        setAssistantCitations(msg.data || []);
+                      } else if (msg.type === 'delta') {
+                        appendAssistantDelta(msg.data || '');
+                      } else if (msg.type === 'done') {
+                        // no-op
+                      } else if (msg.type === 'error') {
+                        appendAssistantDelta(`\n[Error] ${msg.data}`);
+                      } else if (msg.type === 'chat') {
+                        if (msg.data?.chatId) setChatId(msg.data.chatId);
+                      }
+                    } catch {}
+                  }
+                }
+              } catch (err) {
+                appendAssistantDelta("\n[Error] Chat failed.");
+              }
+            })();
           }}
         >
           <div className="w-full max-w-4xl">
@@ -215,12 +294,12 @@ export function CenterChat() {
                                 if (uploadedFile?.url) {
                                   console.log("Setting PDF as current from files list:", file.name, uploadedFile.url);
                                   setCurrent({
-                                    id: null,
+                                    id: uploadedFile?.pdfId ?? null,
                                     publicId: null,
                                     name: file.name,
                                     url: uploadedFile.url,
                                     currentPage: 1,
-                                    totalPages: null
+                                    totalPages: uploadedFile?.pageCount ?? null
                                   });
                                   setRightPanelOpen(true);
                                   console.log("PDF set as current and right panel opened");

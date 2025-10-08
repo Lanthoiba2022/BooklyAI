@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 // Import pdf-parse dynamically at runtime to avoid bundling issues and any
 // accidental file system access during build.
-let pdfParse: (data: Buffer) => Promise<{ text: string }>; 
-import OpenAI from "openai";
+let pdfParse: (data: Buffer) => Promise<{ text: string }>;
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -16,8 +16,10 @@ type Chunk = {
 };
 
 function chunkTextByPage(pages: string[]): Chunk[] {
-  const maxLen = 1100;
-  const overlap = 150;
+  // Approximate ~2000 tokens per chunk using ~4 chars/token heuristic => ~8000 chars
+  // Add an overlap to preserve context across chunks
+  const maxLen = 8000;
+  const overlap = 800;
   const chunks: Chunk[] = [];
   for (let i = 0; i < pages.length; i++) {
     const pageNum = i + 1;
@@ -37,13 +39,13 @@ function chunkTextByPage(pages: string[]): Chunk[] {
 export async function POST(req: NextRequest) {
   console.log("[API] /api/pdf/process POST: start");
   if (!supabaseServer) return NextResponse.json({ error: "Server not configured" }, { status: 500 });
-  const { openaiApiKey } = getEnv();
-  if (!openaiApiKey) return NextResponse.json({ error: "OPENAI_API_KEY missing" }, { status: 500 });
+  const { geminiApiKey } = getEnv();
+  if (!geminiApiKey) return NextResponse.json({ error: "GEMINI_API missing" }, { status: 500 });
 
   try {
     if (!pdfParse) {
-      const mod = await import("pdf-parse");
-      // default export contains the function
+      // Prefer direct ESM entry to avoid package resolution surprises
+      const mod = await import("pdf-parse/lib/pdf-parse.js");
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       pdfParse = (mod as any).default ?? (mod as any);
     }
@@ -82,14 +84,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: dlErr?.message || 'Download failed' }, { status: 500 });
     }
 
-    const buf = Buffer.from(await fileData.arrayBuffer());
+    const buf = Buffer.from(await (fileData as any).arrayBuffer());
+    if (!buf || buf.byteLength === 0) {
+      console.error("[API] /api/pdf/process POST: empty file buffer");
+      return NextResponse.json({ error: 'Downloaded file was empty' }, { status: 500 });
+    }
     const parsed = await pdfParse(buf);
     // pdf-parse returns combined text; attempt page split via metadata if available
     const pages = (parsed?.text || '').split('\f');
 
     const chunks = chunkTextByPage(pages);
 
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const embedModel = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
     // Embed in batches
     const batchSize = 64;
     const total = chunks.length;
@@ -102,14 +109,19 @@ export async function POST(req: NextRequest) {
       const batch = chunks.slice(i, i + batchSize);
       const input = batch.map(c => c.text);
       try {
-        const emb = await openai.embeddings.create({ model: 'text-embedding-3-small', input });
+        const responses = await Promise.all(
+          input.map(text => (embedModel as any).embedContent({
+            content: { parts: [{ text }], role: 'user' },
+            taskType: 'RETRIEVAL_DOCUMENT',
+          }))
+        );
         const rows = batch.map((c, idx) => ({
           pdf_id: pdfId,
           page: c.page,
           line_start: c.line_start,
           line_end: c.line_end,
           text: c.text,
-          embedding: emb.data[idx]?.embedding ?? null,
+          embedding: (responses[idx] as any)?.embedding?.values ?? null,
         }));
         // Insert in smaller chunks to avoid payload limits
         const sliceSize = 100;

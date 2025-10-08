@@ -34,13 +34,13 @@ export async function GET(req: NextRequest) {
 
     // Join with pdfs table by storage_path when possible for status/page_count
     const paths = (storageList ?? []).map(f => `${userFolder}/${f.name}`);
-    let metadataMap = new Map<string, { status: string | null; page_count: number | null }>();
+    let metadataMap = new Map<string, { id: number | null; status: string | null; page_count: number | null }>();
     if (paths.length > 0) {
       const { data: pdfRows } = await supabaseServer
         .from('pdfs')
-        .select('storage_path, status, page_count')
+        .select('id, storage_path, status, page_count')
         .in('storage_path', paths);
-      (pdfRows ?? []).forEach(r => metadataMap.set(r.storage_path, { status: r.status ?? null, page_count: r.page_count ?? null }));
+      (pdfRows ?? []).forEach(r => metadataMap.set(r.storage_path, { id: r.id ?? null, status: r.status ?? null, page_count: r.page_count ?? null }));
     }
 
     // Batch-generate signed URLs to avoid N parallel calls and reduce latency
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     // Construct response quickly; do not block on any stragglers
     const files = (storageList ?? []).map((f) => {
       const path = `${userFolder}/${f.name}`;
-      const meta = metadataMap.get(path) ?? { status: null, page_count: null };
+      const meta = metadataMap.get(path) ?? { id: null, status: null, page_count: null };
       return {
         id: path,
         name: f.name.replace(/^\d+_/, ""),
@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
         url: signedUrlMap.get(path),
         status: meta.status,
         pageCount: meta.page_count,
+        pdfId: meta.id,
       };
     });
     console.log("[API] /api/pdf/list GET: files built", files.length);

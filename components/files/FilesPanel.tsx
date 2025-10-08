@@ -8,7 +8,7 @@ import { X, Trash2 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/auth";
 
-type FileItem = { name: string; id: string; path: string; url?: string; status?: string | null; pageCount?: number | null };
+type FileItem = { name: string; id: string; path: string; url?: string; status?: string | null; pageCount?: number | null; pdfId?: number | null };
 
 export function FilesPanel() {
   const { user } = useAuthStore();
@@ -191,7 +191,7 @@ export function FilesPanel() {
           const uploadedFile = await pollForUploadedUrl(uploadData.path);
           if (uploadedFile?.url) {
             console.log("[FilesPanel] onUpload: setCurrent", uploadedFile.url);
-            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
+            setCurrent({ id: uploadedFile.pdfId ?? null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
             setRightPanelOpen(true);
           }
         }
@@ -205,7 +205,7 @@ export function FilesPanel() {
           const uploadedFile = await pollForUploadedUrl(uploadData.path);
           if (uploadedFile?.url) {
             console.log("[FilesPanel] onUpload: setCurrent", uploadedFile.url);
-            setCurrent({ id: null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
+            setCurrent({ id: uploadedFile.pdfId ?? null, publicId: null, name: file.name, url: uploadedFile.url, currentPage: 1, totalPages: uploadedFile.pageCount ?? null });
             setRightPanelOpen(true);
           }
         }
@@ -328,7 +328,7 @@ export function FilesPanel() {
                 className="flex-1 text-left min-w-0"
                 onClick={() => {
                   // Allow opening while processing; viewer uses signed URL
-                  setCurrent({ id: null, publicId: null, name: f.name, url: f.url ?? null, currentPage: 1, totalPages: f.pageCount ?? null });
+                  setCurrent({ id: f.pdfId ?? null, publicId: null, name: f.name, url: f.url ?? null, currentPage: 1, totalPages: f.pageCount ?? null });
                   setRightPanelOpen(true);
                 }}
               >
