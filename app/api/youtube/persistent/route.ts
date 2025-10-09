@@ -48,12 +48,10 @@ export async function GET(req: NextRequest) {
     if (videoIdsParam) {
       const ids = videoIdsParam.split(',').map(v => v.trim()).filter(Boolean);
       if (ids.length > 0) {
-        // @ts-expect-error chaining type for in()
         query = (query as any).in('video_id', ids);
       }
     } else {
       // Default ordering and limit
-      // @ts-expect-error chaining types
       query = (query as any)
         .order('relevance_score', { ascending: false })
         .order('created_at', { ascending: false })

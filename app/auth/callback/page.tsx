@@ -3,8 +3,9 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
+import { Suspense } from "react";
 
-export default function AuthCallbackPage() {
+function AuthCallbackForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [message, setMessage] = React.useState<string>("Completing sign-in...");
@@ -68,4 +69,14 @@ export default function AuthCallbackPage() {
   );
 }
 
-
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    }>
+      <AuthCallbackForm />
+    </Suspense>
+  );
+}

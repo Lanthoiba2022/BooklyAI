@@ -60,7 +60,9 @@ export async function GET(req: NextRequest) {
     }> = {};
 
     incorrectAnswers.forEach(answer => {
-      const quizConfig = answer.quiz_attempt?.quiz?.config;
+      const quizAttempt = Array.isArray(answer.quiz_attempt) ? answer.quiz_attempt[0] : answer.quiz_attempt;
+      const quiz = Array.isArray(quizAttempt?.quiz) ? quizAttempt.quiz[0] : quizAttempt?.quiz;
+      const quizConfig = quiz?.config;
       if (!quizConfig?.questions) return;
 
       const question = quizConfig.questions[answer.question_index - 1];
@@ -101,7 +103,9 @@ export async function GET(req: NextRequest) {
 
     if (allAnswers) {
       allAnswers.forEach(answer => {
-        const quizConfig = answer.quiz_attempt?.quiz?.config;
+        const quizAttempt = Array.isArray(answer.quiz_attempt) ? answer.quiz_attempt[0] : answer.quiz_attempt;
+        const quiz = Array.isArray(quizAttempt?.quiz) ? quizAttempt.quiz[0] : quizAttempt?.quiz;
+        const quizConfig = quiz?.config;
         if (!quizConfig?.questions) return;
 
         const question = quizConfig.questions[answer.question_index - 1];

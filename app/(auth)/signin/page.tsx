@@ -6,8 +6,9 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, LogIn } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { Suspense } from "react";
 
-export default function SignInPage() {
+function SignInForm() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
@@ -240,5 +241,17 @@ export default function SignInPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-background p-4">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    }>
+      <SignInForm />
+    </Suspense>
   );
 }

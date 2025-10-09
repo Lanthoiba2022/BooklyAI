@@ -52,18 +52,25 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: true });
 
     // Calculate additional metrics
-    const scoreHistory = allAttempts?.map(attempt => ({
-      date: attempt.created_at.split('T')[0],
-      score: attempt.score || 0,
-      percentage: Math.round(((attempt.score || 0) / (attempt.quiz?.config?.questions?.length || 1)) * 100)
-    })) || [];
+    const scoreHistory = allAttempts?.map(attempt => {
+      const quizRel: any = (attempt as any).quiz;
+      const config = Array.isArray(quizRel) ? quizRel[0]?.config : quizRel?.config;
+      const totalQs = config?.questions?.length || 1;
+      return {
+        date: (attempt as any).created_at.split('T')[0],
+        score: (attempt as any).score || 0,
+        percentage: Math.round(((((attempt as any).score || 0) / totalQs) * 100))
+      };
+    }) || [];
 
     // Topic performance analysis
     const topicPerformance: Record<string, { total: number; correct: number; average: number }> = {};
     
     allAttempts?.forEach(attempt => {
-      const questions = attempt.quiz?.config?.questions || [];
-      const questionScores = attempt.details?.questionScores || [];
+      const quizRel: any = (attempt as any).quiz;
+      const config = Array.isArray(quizRel) ? quizRel[0]?.config : quizRel?.config;
+      const questions = config?.questions || [];
+      const questionScores = (attempt as any).details?.questionScores || [];
       
       questions.forEach((q: any, index: number) => {
         const topic = q.topic || "General";
@@ -89,8 +96,10 @@ export async function GET(req: NextRequest) {
     };
 
     allAttempts?.forEach(attempt => {
-      const questions = attempt.quiz?.config?.questions || [];
-      const questionScores = attempt.details?.questionScores || [];
+      const quizRel: any = (attempt as any).quiz;
+      const config = Array.isArray(quizRel) ? quizRel[0]?.config : quizRel?.config;
+      const questions = config?.questions || [];
+      const questionScores = (attempt as any).details?.questionScores || [];
       
       questions.forEach((q: any, index: number) => {
         const type = q.type || "mcq";
@@ -108,15 +117,22 @@ export async function GET(req: NextRequest) {
     });
 
     // Recent activity
-    const recentActivity = recentAttempts?.map(attempt => ({
-      id: attempt.id,
-      score: attempt.score || 0,
-      totalQuestions: attempt.quiz?.config?.questions?.length || 0,
-      percentage: Math.round(((attempt.score || 0) / (attempt.quiz?.config?.questions?.length || 1)) * 100),
-      pdfName: attempt.quiz?.pdf?.name || "Unknown PDF",
-      createdAt: attempt.created_at,
-      timeTaken: attempt.details?.timeTaken || 0
-    })) || [];
+    const recentActivity = recentAttempts?.map(attempt => {
+      const quizRel: any = (attempt as any).quiz;
+      const config = Array.isArray(quizRel) ? quizRel[0]?.config : quizRel?.config;
+      const pdfRel = Array.isArray(quizRel) ? quizRel[0]?.pdf : quizRel?.pdf;
+      const totalQuestions = config?.questions?.length || 0;
+      const percentage = Math.round(((((attempt as any).score || 0) / (totalQuestions || 1)) * 100));
+      return {
+        id: (attempt as any).id,
+        score: (attempt as any).score || 0,
+        totalQuestions,
+        percentage,
+        pdfName: pdfRel?.name || "Unknown PDF",
+        createdAt: (attempt as any).created_at,
+        timeTaken: (attempt as any).details?.timeTaken || 0,
+      };
+    }) || [];
 
     // Calculate improvement trend
     const recentScores = scoreHistory.slice(-5).map(h => h.percentage);

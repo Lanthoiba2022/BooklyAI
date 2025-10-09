@@ -59,12 +59,16 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const formattedChats = (chats ?? []).map(chat => ({
-      id: chat.id,
-      createdAt: chat.created_at,
-      pdfName: chat.pdfs?.name ?? null,
-      lastMessage: lastMessages[chat.id] ?? null,
-    }));
+    const formattedChats = (chats ?? []).map(chat => {
+      const pdfsField: any = (chat as any).pdfs;
+      const pdfName = Array.isArray(pdfsField) ? (pdfsField[0]?.name ?? null) : (pdfsField?.name ?? null);
+      return {
+        id: chat.id,
+        createdAt: chat.created_at,
+        pdfName,
+        lastMessage: lastMessages[chat.id] ?? null,
+      };
+    });
 
     console.log("[API] /api/chats GET: found", formattedChats.length, "chats");
     const res = NextResponse.json({ chats: formattedChats });

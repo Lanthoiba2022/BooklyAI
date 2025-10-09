@@ -73,12 +73,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Also extract topics from the PDF content if available
-    if (quizAttempt.quiz?.pdf?.id) {
+    const quiz = Array.isArray(quizAttempt.quiz) ? quizAttempt.quiz[0] : quizAttempt.quiz;
+    const pdfId = Array.isArray(quiz?.pdf) ? quiz.pdf[0]?.id : (quiz?.pdf as any)?.id;
+    if (pdfId) {
       try {
         const { data: chunks } = await supabaseServer
           .from('chunks')
           .select('text')
-          .eq('pdf_id', quizAttempt.quiz.pdf.id)
+          .eq('pdf_id', pdfId)
           .limit(3);
         
         if (chunks && chunks.length > 0) {

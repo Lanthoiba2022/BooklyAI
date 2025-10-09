@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
     // Transform the data for the frontend
     const quizHistory = attempts?.map(attempt => {
-      const quiz = attempt.quiz;
+      const quiz = Array.isArray(attempt.quiz) ? attempt.quiz[0] : attempt.quiz;
       const config = quiz?.config || {};
       const questions = config.questions || [];
       const totalQuestions = questions.length;
@@ -62,8 +62,8 @@ export async function GET(req: NextRequest) {
       return {
         id: attempt.id,
         quizId: quiz?.id,
-        pdfId: quiz?.pdf?.id,
-        pdfName: quiz?.pdf?.name || "Unknown PDF",
+        pdfId: Array.isArray(quiz?.pdf) ? quiz.pdf[0]?.id : (quiz?.pdf as any)?.id,
+        pdfName: Array.isArray(quiz?.pdf) ? quiz.pdf[0]?.name || "Unknown PDF" : (quiz?.pdf as any)?.name || "Unknown PDF",
         score: attempt.score,
         totalQuestions,
         percentage,

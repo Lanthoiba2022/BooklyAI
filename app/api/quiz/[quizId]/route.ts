@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUserFromCookies } from "@/lib/auth-server";
 import { ensureUserProvisioned } from "@/lib/user";
 import { supabaseServer } from "@/lib/supabaseServer";
@@ -6,8 +6,8 @@ import { supabaseServer } from "@/lib/supabaseServer";
 export const runtime = "nodejs";
 
 export async function GET(
-  req: Request,
-  { params }: { params: { quizId: string } }
+  req: NextRequest,
+  ctx: { params: Promise<{ quizId: string }> }
 ) {
   const { user } = await getAuthenticatedUserFromCookies(req);
   if (!user) {
@@ -24,7 +24,8 @@ export async function GET(
   }
 
   try {
-    const quizId = parseInt(params.quizId);
+    const { quizId: quizIdParam } = await ctx.params;
+    const quizId = parseInt(quizIdParam);
     if (isNaN(quizId)) {
       return NextResponse.json({ error: "Invalid quiz ID" }, { status: 400 });
     }
@@ -59,10 +60,12 @@ export async function GET(
       topic: q.topic
     }));
 
+    const pdfName = (quiz as any).pdf?.name as string | undefined;
+
     return NextResponse.json({
       id: quiz.id,
       pdfId: quiz.pdf_id,
-      pdfName: quiz.pdf?.name,
+      pdfName,
       config: {
         mcq: quiz.config.mcq,
         saq: quiz.config.saq,

@@ -28,17 +28,7 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
     const containerRef = React.useRef<HTMLDivElement>(null);
 
     // Create plugins with zoom limits
-    const zoomPluginInstance = zoomPlugin({
-        onZoom: (zoom) => {
-            // Prevent zooming below 0.5 (50%) to avoid scale factor errors
-            if (zoom.scale < 0.5) {
-                zoomPluginInstance.zoomTo(0.5);
-                return;
-            }
-            // Update scale factor CSS variable
-            updateScaleFactor(zoom.scale);
-        }
-    });
+    const zoomPluginInstance = zoomPlugin();
 
     const fullScreenPluginInstance = fullScreenPlugin({
         onEnterFullScreen: () => {
@@ -51,14 +41,7 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
         }
     });
 
-    const defaultLayoutPluginInstance = defaultLayoutPlugin({
-        toolbarPlugin: {
-            moreActionsPopover: {
-                // Hide zoom controls in fullscreen
-                render: isFullScreen ? () => null : undefined
-            }
-        }
-    });
+    const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
     const toolbarPluginInstance = toolbarPlugin();
     const searchPluginInstance = searchPlugin();
@@ -67,7 +50,7 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
 
     // Function to update scale factor CSS variable
     const updateScaleFactor = (scale: number) => {
-        const viewerElement = document.querySelector('.rpv-core__viewer');
+        const viewerElement = document.querySelector('.rpv-core__viewer') as HTMLElement;
         if (viewerElement) {
             viewerElement.style.setProperty('--scale-factor', scale.toString());
         }
@@ -129,7 +112,6 @@ export default function ReactPdfViewer({ url, onLoaded }: ReactPdfViewerProps) {
                                 fullScreenPluginInstance
                             ]}
                             onDocumentLoad={handleDocumentLoad}
-                            onDocumentError={handleDocumentError}
                         />
                     </div>
                 </Worker>

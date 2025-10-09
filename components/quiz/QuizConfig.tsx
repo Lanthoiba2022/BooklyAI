@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuizStore, QuizConfig } from "@/store/quiz";
+import { useQuizStore, type QuizConfig } from "@/store/quiz";
 import { usePdfStore } from "@/store/pdf";
 import { useState } from "react";
 

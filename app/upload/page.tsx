@@ -80,6 +80,7 @@ export default function UploadPage() {
         try {
           // Instead of creating signed URL immediately, fetch the files list
           // to get the properly formatted URL (same as FilesPanel approach)
+          if (!supabaseBrowser) return;
           const { data: { session } } = await supabaseBrowser.auth.getSession();
           let token = session?.access_token;
           if (!token) {
