@@ -21,8 +21,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Get user's persistent YouTube recommendations from database
-    const { data: recommendations, error } = await supabaseServer
+    const { searchParams } = new URL(req.url);
+    const videoIdsParam = searchParams.get('videoIds');
+
+    // Build base query
+    let query = supabaseServer
       .from('youtube_recommendations')
       .select(`
         id,
@@ -39,10 +42,25 @@ export async function GET(req: NextRequest) {
         video_url,
         created_at
       `)
-      .eq('owner_id', dbUser.id)
-      .order('relevance_score', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(20);
+      .eq('owner_id', dbUser.id);
+
+    // If specific video IDs provided, filter by them; else return top recent
+    if (videoIdsParam) {
+      const ids = videoIdsParam.split(',').map(v => v.trim()).filter(Boolean);
+      if (ids.length > 0) {
+        // @ts-expect-error chaining type for in()
+        query = (query as any).in('video_id', ids);
+      }
+    } else {
+      // Default ordering and limit
+      // @ts-expect-error chaining types
+      query = (query as any)
+        .order('relevance_score', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(20);
+    }
+
+    const { data: recommendations, error } = await query;
 
     if (error) {
       console.error('[YouTube Persistent API] Database error:', error);
