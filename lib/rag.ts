@@ -52,10 +52,11 @@ export type RetrievedChunk = {
 export function buildPromptFromChunks(question: string, chunks: RetrievedChunk[]): { system: string; user: string; citations: Array<{ page: number; line_start: number | null; line_end: number | null; text: string }>; } {
   const top = chunks.slice(0, 5);
   const citations = top.map((c) => ({ page: c.page, line_start: c.line_start ?? null, line_end: c.line_end ?? null, text: c.text.slice(0, 280) }));
-  const context = top.map((c, i) => `[#${i + 1} | page ${c.page}${c.line_start != null ? `, lines ${c.line_start}-${c.line_end ?? c.line_start}` : ''}] ${c.text}`).join("\n\n");
+  const context = top.map((c, i) => `[#${i + 1} | p. ${c.page}${c.line_start != null ? `, L ${c.line_start}-${c.line_end ?? c.line_start}` : ''}] ${c.text}`).join("\n\n");
   const system = [
     "You are a helpful, concise tutor. Use the provided PDF context only.",
-    "Cite page and lines inline like (p. 12, L 10-20). Do not fabricate citations.",
+    "When citing, include inline citations using page and line numbers from the context, e.g., (p. 5, L 12-18).",
+    "Only cite pages/lines that correspond to the provided context. Do not fabricate.",
     "Prefer step-by-step clarity. If uncertain, say so briefly.",
   ].join(" \n");
   const user = [
@@ -63,7 +64,7 @@ export function buildPromptFromChunks(question: string, chunks: RetrievedChunk[]
     question,
     "\n\nContext (numbered excerpts):\n",
     context,
-    "\n\nInstructions: Answer concisely and cite pages/lines, e.g., (p. X, L a-b).",
+    "\n\nInstructions: Answer concisely and add inline citations like (p. X, L a-b) that match the provided context.",
   ].join(" ");
   return { system, user, citations };
 }

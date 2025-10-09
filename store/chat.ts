@@ -5,7 +5,7 @@ export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  citations?: Array<{ page: number; text?: string }>;
+  citations?: Array<{ page: number; line_start?: number | null; line_end?: number | null; text?: string }>;
   createdAt: number;
 };
 
@@ -19,7 +19,7 @@ type ChatState = {
   addMessage: (message: ChatMessage) => void;
   startAssistantMessage: () => void;
   appendAssistantDelta: (delta: string) => void;
-  setAssistantCitations: (cites: Array<{ page: number; text?: string }>) => void;
+  setAssistantCitations: (cites: Array<{ page: number; line_start?: number | null; line_end?: number | null; text?: string }>) => void;
   reset: () => void;
 };
 
