@@ -118,26 +118,45 @@ export async function GET(req: NextRequest) {
     const rankedVideos = rankVideosByRelevance(uniqueVideos, uniqueTopics);
     const recommendations = rankedVideos.slice(0, maxResults);
 
-    // Store recommendations in database
+    // Store recommendations in database (prevent duplicates)
     if (recommendations.length > 0) {
       try {
-        const recommendationRows = recommendations.map(video => ({
-          owner_id: dbUser.id,
-          video_id: video.videoId,
-          title: video.title,
-          description: video.description,
-          thumbnail_url: video.thumbnailUrl,
-          channel_title: video.channelTitle,
-          duration: video.duration,
-          view_count: video.viewCount,
-          relevance_score: (video as any).relevanceScore || 0,
-          source_type: uniqueTopics.length > 0 ? 'content' : 'generic',
-          source_topic: uniqueTopics[0] || 'general_physics',
-        }));
-
-        await supabaseServer
+        // Get existing video IDs for this user to prevent duplicates
+        const existingVideoIds = new Set<string>();
+        const { data: existingVideos } = await supabaseServer
           .from('youtube_recommendations')
-          .insert(recommendationRows);
+          .select('video_id')
+          .eq('owner_id', dbUser.id);
+        
+        if (existingVideos) {
+          existingVideos.forEach(video => existingVideoIds.add(video.video_id));
+        }
+
+        // Filter out duplicates and prepare new recommendations
+        const newRecommendations = recommendations.filter(video => 
+          !existingVideoIds.has(video.videoId)
+        );
+
+        if (newRecommendations.length > 0) {
+          // Use the safe insert function to prevent duplicates
+          for (const video of newRecommendations) {
+            await supabaseServer.rpc('insert_youtube_recommendation', {
+              p_owner_id: dbUser.id,
+              p_video_id: video.videoId,
+              p_title: video.title,
+              p_description: video.description,
+              p_thumbnail_url: video.thumbnailUrl,
+              p_channel_title: video.channelTitle,
+              p_duration: video.duration,
+              p_view_count: video.viewCount,
+              p_relevance_score: (video as any).relevanceScore || 0,
+              p_source_type: uniqueTopics.length > 0 ? 'content' : 'generic',
+              p_source_topic: uniqueTopics[0] || 'general_physics',
+              p_video_url: `https://www.youtube.com/watch?v=${video.videoId}`,
+              p_quiz_attempt_id: null, // Global recommendations don't have quiz context
+            });
+          }
+        }
       } catch (error) {
         console.error('[YouTube API] Database storage error:', error);
         // Continue even if storage fails
@@ -155,6 +174,7 @@ export async function GET(req: NextRequest) {
         viewCount: video.viewCount,
         publishedAt: video.publishedAt,
         relevanceScore: (video as any).relevanceScore || 0,
+        videoUrl: `https://www.youtube.com/watch?v=${video.videoId}`,
       })),
       topics: uniqueTopics,
       totalFound: recommendations.length,
