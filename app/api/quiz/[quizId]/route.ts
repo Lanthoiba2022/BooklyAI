@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getAuthenticatedUserFromCookies } from "@/lib/auth-server";
 import { ensureUserProvisioned } from "@/lib/user";
 import { supabaseServer } from "@/lib/supabaseServer";
@@ -6,7 +6,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 export const runtime = "nodejs";
 
 export async function GET(
-  req: NextRequest,
+  req: Request,
   { params }: { params: { quizId: string } }
 ) {
   const { user } = await getAuthenticatedUserFromCookies(req);
