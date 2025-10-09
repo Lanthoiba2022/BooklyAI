@@ -3,6 +3,7 @@ import { useUiStore } from "@/store/ui";
 import { usePdfStore } from "@/store/pdf";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import { Menu, PanelRightOpen, PanelRightClose } from "lucide-react";
 import * as React from "react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -30,6 +31,15 @@ export function MainLayout({
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
             <Menu className="h-5 w-5" />
           </Button>
+          <Image
+            src="/Booklylogofinal1.png"
+            alt="Bookly logo"
+            width={24}
+            height={24}
+            className="h-6 w-6"
+            unoptimized
+            priority
+          />
           <span className="font-semibold tracking-tight">Bookly</span>
         </div>
         <div className="flex items-center gap-2">
