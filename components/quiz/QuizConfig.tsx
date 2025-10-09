@@ -34,7 +34,8 @@ export function QuizConfig() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to generate quiz");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate quiz");
       }
 
       const data = await response.json();
@@ -46,9 +47,10 @@ export function QuizConfig() {
         questions: data.questions,
         createdAt: new Date().toISOString()
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Quiz generation error:", error);
-      alert("Failed to generate quiz. Please try again.");
+      const errorMessage = error.message || "Failed to generate quiz. Please try again.";
+      alert(errorMessage);
     } finally {
       setIsGenerating(false);
       setGenerating(false);

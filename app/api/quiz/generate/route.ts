@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "At least one question type required" }, { status: 400 });
     }
 
-    // Check PDF ownership
+    // Check PDF ownership and status
     const { data: pdf } = await supabaseServer
       .from("pdfs")
       .select("id, owner_id, status")
@@ -54,6 +54,30 @@ export async function POST(req: NextRequest) {
 
     if (!pdf) {
       return NextResponse.json({ error: "PDF not found or not ready" }, { status: 404 });
+    }
+
+    // Check if PDF has been processed and has chunks
+    console.log(`Checking chunks for PDF ${pdfId}...`);
+    const { data: chunks, error: chunksError } = await supabaseServer
+      .from("chunks")
+      .select("id, text")
+      .eq("pdf_id", pdfId)
+      .limit(5);
+
+    if (chunksError) {
+      console.error("Error checking chunks:", chunksError);
+      return NextResponse.json({ error: "Failed to verify PDF content" }, { status: 500 });
+    }
+
+    console.log(`Found ${chunks?.length || 0} chunks for PDF ${pdfId}`);
+    if (chunks && chunks.length > 0) {
+      console.log("Sample chunk text:", chunks[0].text?.substring(0, 100) + "...");
+    }
+
+    if (!chunks || chunks.length === 0) {
+      return NextResponse.json({ 
+        error: "PDF has not been processed yet or contains no extractable text. Please wait for processing to complete or try uploading a different PDF." 
+      }, { status: 400 });
     }
 
     // Generate quiz
