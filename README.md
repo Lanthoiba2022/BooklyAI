@@ -4,6 +4,27 @@
   <img src="./public/Booklylogofinal1.png" alt="Bookly AI" height="120" />
 </p>
 
+<p align="center">
+  <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white&style=for-the-badge" alt="Next.js"/></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-222222?logo=react&logoColor=61DAFB&style=for-the-badge" alt="React"/></a>
+  <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-0F172A?logo=tailwindcss&logoColor=06B6D4&style=for-the-badge" alt="Tailwind CSS"/></a>
+  <a href="https://ui.shadcn.com"><img src="https://img.shields.io/badge/shadcn%2Fui-111111?style=for-the-badge" alt="shadcn/ui"/></a>
+  <a href="https://www.radix-ui.com"><img src="https://img.shields.io/badge/Radix_UI-161618?style=for-the-badge" alt="Radix UI"/></a>
+  <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-1A1F2B?logo=supabase&logoColor=3FCF8E&style=for-the-badge" alt="Supabase"/></a>
+  <a href="https://ai.google.dev"><img src="https://img.shields.io/badge/Google_Gemini-2B2D31?style=for-the-badge" alt="Google Gemini"/></a>
+  <a href="https://developers.google.com/youtube"><img src="https://img.shields.io/badge/YouTube_API-0F0F0F?logo=youtube&logoColor=FF0000&style=for-the-badge" alt="YouTube API"/></a>
+  <a href="https://zustand-demo.pmnd.rs/"><img src="https://img.shields.io/badge/Zustand-222222?style=for-the-badge" alt="Zustand"/></a>
+</p>
+
+Bookly AI is an AI-powered study assistant that lets you upload PDFs, chat with retrieval-augmented answers, generate quizzes, review progress, and explore related YouTube content. It uses Supabase for authentication and persistence, Google Gemini for generation, and a lightweight RAG pipeline for grounded responses.
+
+## Highlights
+- **Chat with RAG**: Ask questions; answers cite relevant PDF pages when available.
+- **PDF ingestion**: Upload, parse, embed, and search your documents.
+- **Quizzes and progress**: Generate quizzes, track attempts, view weaknesses and dashboard.
+- **YouTube suggestions**: Surface related topics and recommended videos.
+- **Auth & sessions**: Supabase auth with middleware-protected routes.
+
 ## User Flow
 
 ```mermaid
@@ -151,27 +172,6 @@ graph TD
     style ShowResults fill:#f3e5f5
     style StoreAttempt fill:#fce4ec
 ```
-
-<p align="center">
-  <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white&style=for-the-badge" alt="Next.js"/></a>
-  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-222222?logo=react&logoColor=61DAFB&style=for-the-badge" alt="React"/></a>
-  <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-0F172A?logo=tailwindcss&logoColor=06B6D4&style=for-the-badge" alt="Tailwind CSS"/></a>
-  <a href="https://ui.shadcn.com"><img src="https://img.shields.io/badge/shadcn%2Fui-111111?style=for-the-badge" alt="shadcn/ui"/></a>
-  <a href="https://www.radix-ui.com"><img src="https://img.shields.io/badge/Radix_UI-161618?style=for-the-badge" alt="Radix UI"/></a>
-  <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-1A1F2B?logo=supabase&logoColor=3FCF8E&style=for-the-badge" alt="Supabase"/></a>
-  <a href="https://ai.google.dev"><img src="https://img.shields.io/badge/Google_Gemini-2B2D31?style=for-the-badge" alt="Google Gemini"/></a>
-  <a href="https://developers.google.com/youtube"><img src="https://img.shields.io/badge/YouTube_API-0F0F0F?logo=youtube&logoColor=FF0000&style=for-the-badge" alt="YouTube API"/></a>
-  <a href="https://zustand-demo.pmnd.rs/"><img src="https://img.shields.io/badge/Zustand-222222?style=for-the-badge" alt="Zustand"/></a>
-</p>
-
-Bookly AI is an AI-powered study assistant that lets you upload PDFs, chat with retrieval-augmented answers, generate quizzes, review progress, and explore related YouTube content. It uses Supabase for authentication and persistence, Google Gemini for generation, and a lightweight RAG pipeline for grounded responses.
-
-## Highlights
-- **Chat with RAG**: Ask questions; answers cite relevant PDF pages when available.
-- **PDF ingestion**: Upload, parse, embed, and search your documents.
-- **Quizzes and progress**: Generate quizzes, track attempts, view weaknesses and dashboard.
-- **YouTube suggestions**: Surface related topics and recommended videos.
-- **Auth & sessions**: Supabase auth with middleware-protected routes.
 
 ## Tech Stack
 - **Framework**: Next.js 15 (App Router), React 19
