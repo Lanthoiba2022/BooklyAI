@@ -21,8 +21,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Get all incorrect answers with question details
-    const { data: incorrectAnswers } = await supabaseServer
+    const attemptIdParam = req.nextUrl.searchParams.get("quizAttemptId");
+    const attemptFilter = attemptIdParam ? Number(attemptIdParam) : null;
+
+    // Get incorrect answers scoped (optionally) to a specific quiz attempt
+    let incorrectQuery = supabaseServer
       .from("answers")
       .select(`
         question_index,
@@ -34,6 +37,10 @@ export async function GET(req: NextRequest) {
       `)
       .eq("quiz_attempt.owner_id", dbUser.id)
       .eq("is_correct", false);
+    if (attemptFilter) {
+      incorrectQuery = incorrectQuery.eq("quiz_attempt_id", attemptFilter);
+    }
+    const { data: incorrectAnswers } = await incorrectQuery;
 
     if (!incorrectAnswers || incorrectAnswers.length === 0) {
       return NextResponse.json({
@@ -76,8 +83,8 @@ export async function GET(req: NextRequest) {
       topicWeaknesses[topic].commonMistakes.push(answer.user_answer?.text || "");
     });
 
-    // Get total attempts per topic for accuracy calculation
-    const { data: allAnswers } = await supabaseServer
+    // Get total attempts per topic for accuracy calculation (same scope)
+    let allAnswersQuery = supabaseServer
       .from("answers")
       .select(`
         question_index,
@@ -87,6 +94,10 @@ export async function GET(req: NextRequest) {
         )
       `)
       .eq("quiz_attempt.owner_id", dbUser.id);
+    if (attemptFilter) {
+      allAnswersQuery = allAnswersQuery.eq("quiz_attempt_id", attemptFilter);
+    }
+    const { data: allAnswers } = await allAnswersQuery;
 
     if (allAnswers) {
       allAnswers.forEach(answer => {

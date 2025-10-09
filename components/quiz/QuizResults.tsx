@@ -9,7 +9,7 @@ import { useUiStore } from "@/store/ui";
 
 export function QuizResults() {
   const { quizResults, currentQuiz, resetQuiz } = useQuizStore();
-  const { jumpToPage, setRightPanelOpen } = usePdfStore();
+  const { jumpToPage } = usePdfStore();
   const { setCenterView } = useUiStore();
 
   if (!quizResults || !currentQuiz) return null;
@@ -19,7 +19,7 @@ export function QuizResults() {
       if (typeof jumpToPage === 'function') {
         const pageZeroBased = Math.max(0, page - 1);
         jumpToPage(pageZeroBased);
-        setRightPanelOpen(true);
+        // Open right panel via UI store if required elsewhere
       }
     } catch (error) {
       console.error("Jump to page error:", error);
