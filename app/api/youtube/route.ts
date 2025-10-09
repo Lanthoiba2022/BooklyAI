@@ -33,15 +33,17 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const pdfId = searchParams.get('pdfId');
+    const chatIdParam = searchParams.get('chatId');
+    const chatId = chatIdParam ? Number(chatIdParam) : null;
     const maxResults = parseInt(searchParams.get('maxResults') || '8');
 
-    // Get chat history if pdfId provided
+    // Get chat history if chatId provided
     let chatHistory: string[] = [];
-    if (pdfId) {
+    if (chatId) {
       const { data: messages } = await supabaseServer
         .from('messages')
         .select('content')
-        .eq('chat_id', pdfId)
+        .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
         .limit(10);
       
@@ -163,6 +165,39 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Persist a markdown assistant message in chat, if chatId provided
+    let persistedMessage: { id: string; role: 'assistant'; content: string; createdAt: number } | null = null;
+    try {
+      if (chatId && recommendations.length > 0) {
+        const markdownLines: string[] = [];
+        markdownLines.push('Here are some related YouTube resources:');
+        markdownLines.push('');
+        recommendations.forEach((video, index) => {
+          const url = `https://www.youtube.com/watch?v=${video.videoId}`;
+          const title = video.title?.replace(/\n/g, ' ').trim() || 'Video';
+          markdownLines.push(`${index + 1}. [${title}](${url}) — ${video.channelTitle || ''}`.trim());
+        });
+        const markdown = markdownLines.join('\n');
+
+        const { data: inserted, error: insertError } = await supabaseServer
+          .from('messages')
+          .insert({ chat_id: chatId, role: 'assistant', content: markdown })
+          .select('id, created_at')
+          .single();
+        if (!insertError && inserted) {
+          persistedMessage = {
+            id: String(inserted.id),
+            role: 'assistant',
+            content: markdown,
+            createdAt: new Date((inserted as any).created_at).getTime(),
+          };
+        }
+      }
+    } catch (persistErr) {
+      // Non-fatal; continue without persisted message
+      console.error('[YouTube API] Persist message error:', persistErr);
+    }
+
     return NextResponse.json({
       recommendations: recommendations.map(video => ({
         videoId: video.videoId,
@@ -178,6 +213,7 @@ export async function GET(req: NextRequest) {
       })),
       topics: uniqueTopics,
       totalFound: recommendations.length,
+      persistedMessage,
     });
 
   } catch (error: any) {

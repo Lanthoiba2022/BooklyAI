@@ -12,6 +12,7 @@ import { useChatStore } from "@/store/chat";
 import { useQuizStore } from "@/store/quiz";
 import { YouTubeRecommendations, YouTubeRecommendationsCompact } from "@/components/youtube/YouTubeRecommendations";
 import { YouTubeRecommendationsLoader as CompactLoader } from "@/components/youtube/YouTubeRecommendationsLoader";
+import { useToast } from "@/components/ui/use-toast";
 
 // Custom hook for auto-resizing textarea
 function useAutoResizeTextarea() {
@@ -54,6 +55,7 @@ export function CenterChat() {
   const { chatId, setChatId, messages, addMessage, startAssistantMessage, appendAssistantDelta, setAssistantCitations } = useChatStore();
   const { isStreaming, setStreaming } = useChatStore();
   const { resetQuiz } = useQuizStore();
+  const { showToast, Toast } = useToast();
 
   // Fetch YouTube recommendations
   const fetchYouTubeRecommendations = async (pdfId?: number, currentQuestion?: string) => {
@@ -63,6 +65,7 @@ export function CenterChat() {
     try {
       const params = new URLSearchParams();
       if (pdfId) params.append('pdfId', pdfId.toString());
+      if (chatId) params.append('chatId', String(chatId));
       if (currentQuestion) params.append('currentQuestion', currentQuestion);
       
       const res = await fetch(`/api/youtube?${params}`, {
@@ -73,6 +76,15 @@ export function CenterChat() {
         const data = await res.json();
         setYoutubeVideos(data.recommendations || []);
         setYoutubeTopics(data.topics || []);
+        // If backend persisted a message, append it locally so it shows immediately
+        if (data.persistedMessage) {
+          addMessage({
+            id: data.persistedMessage.id,
+            role: 'assistant',
+            content: data.persistedMessage.content,
+            createdAt: data.persistedMessage.createdAt,
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching YouTube recommendations:', error);
@@ -80,6 +92,65 @@ export function CenterChat() {
       setLoadingYoutube(false);
     }
   };
+
+  // Load previously saved persistent YouTube recommendations for this user
+  // This is used to render existing recommendations in chat history without refetching/generating
+  const loadPersistentYouTubeRecommendations = React.useCallback(async () => {
+    if (!isAuthenticated || !enableYoutube) return;
+    setLoadingYoutube(true);
+    try {
+      const res = await fetch('/api/youtube/persistent', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setYoutubeVideos(Array.isArray(data.recommendations) ? data.recommendations : []);
+        // Topics are not stored with persistent endpoint in bulk; keep as empty or previous
+        setYoutubeTopics([]);
+      }
+    } catch (e) {
+      console.error('Failed to load persistent YouTube recommendations:', e);
+    } finally {
+      setLoadingYoutube(false);
+    }
+  }, [isAuthenticated, enableYoutube]);
+
+  // Extract video IDs from the latest assistant recommendation message in the current chat
+  const extractRecommendedVideoIds = React.useCallback((): string[] => {
+    const msgs = Array.isArray(messages) ? messages : [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role !== 'assistant' || !m.content) continue;
+      if (!m.content.includes('https://www.youtube.com/watch?v=')) continue;
+      const ids = new Set<string>();
+      const regex = /https?:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/g;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(m.content)) !== null) {
+        ids.add(match[1]);
+      }
+      if (ids.size > 0) return Array.from(ids);
+    }
+    return [];
+  }, [messages]);
+
+  // Load persisted recommendations for the current chat based on extracted video IDs
+  const loadChatHistoryYouTubeRecommendations = React.useCallback(async () => {
+    if (!isAuthenticated) return;
+    const ids = extractRecommendedVideoIds();
+    if (ids.length === 0) return;
+    setLoadingYoutube(true);
+    try {
+      const qs = new URLSearchParams({ videoIds: ids.join(',') }).toString();
+      const res = await fetch(`/api/youtube/persistent?${qs}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setYoutubeVideos(Array.isArray(data.recommendations) ? data.recommendations : []);
+        setYoutubeTopics([]);
+      }
+    } catch (e) {
+      console.error('Failed to load chat-history YouTube recommendations:', e);
+    } finally {
+      setLoadingYoutube(false);
+    }
+  }, [isAuthenticated, extractRecommendedVideoIds]);
 
   const handleValueChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -103,16 +174,27 @@ export function CenterChat() {
     setIsCheckingAuth(false);
   }, [user]);
 
-  // Fetch YouTube recommendations when PDF is selected (only if enabled)
+  // Disable auto-fetch on checkbox/PDF change; only fetch after a user sends a message
   React.useEffect(() => {
-    if (current?.id && isAuthenticated && enableYoutube) {
-      fetchYouTubeRecommendations(current.id);
-    } else if (!enableYoutube) {
-      // Clear YouTube videos when disabled
+    if (!enableYoutube) {
       setYoutubeVideos([]);
       setYoutubeTopics([]);
     }
-  }, [current?.id, isAuthenticated, enableYoutube]);
+  }, [enableYoutube]);
+
+  // When a chat is opened or switched, load previously saved recs scoped to that chat
+  React.useEffect(() => {
+    if (chatId) {
+      loadChatHistoryYouTubeRecommendations();
+    }
+  }, [chatId, loadChatHistoryYouTubeRecommendations]);
+
+  // Also run when messages for the current chat are (re)loaded
+  React.useEffect(() => {
+    if (chatId) {
+      loadChatHistoryYouTubeRecommendations();
+    }
+  }, [messages, chatId, loadChatHistoryYouTubeRecommendations]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
@@ -186,6 +268,7 @@ export function CenterChat() {
 
   return (
     <div className="h-full grid grid-rows-[1fr_auto]">
+      <Toast />
       <div className="p-4 space-y-3 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-sm text-zinc-500">No messages yet. Ask something about your textbook.</div>
@@ -236,7 +319,7 @@ export function CenterChat() {
           ))
         )}
         
-        {/* YouTube Recommendations */}
+        {/* YouTube Recommendations (transient visual list for immediate visibility) */}
         {youtubeVideos.length > 0 && (
           <div className="mt-4">
             <YouTubeRecommendationsCompact 
@@ -247,8 +330,8 @@ export function CenterChat() {
             />
           </div>
         )}
-        
-        {/* YouTube Loading State */}
+
+        {/* YouTube Loading State - show a skeleton while fetching */}
         {loadingYoutube && (
           <div className="mt-4">
             <CompactLoader />
@@ -288,6 +371,10 @@ export function CenterChat() {
               try {
                 startAssistantMessage();
                 setStreaming(true);
+                // Trigger YouTube recommendations synchronously when sending the chat (if enabled)
+                if (enableYoutube) {
+                  fetchYouTubeRecommendations(current?.id ?? undefined, content);
+                }
                 const res = await fetch('/api/chat', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -314,10 +401,6 @@ export function CenterChat() {
                       } else if (msg.type === 'delta') {
                         appendAssistantDelta(msg.data || '');
                       } else if (msg.type === 'done') {
-                        // Fetch YouTube recommendations after assistant is done (only if enabled)
-                        if (enableYoutube) {
-                          fetchYouTubeRecommendations(current?.id ?? undefined, content);
-                        }
                         setStreaming(false);
                       } else if (msg.type === 'error') {
                         appendAssistantDelta(`\n[Error] ${msg.data}`);
@@ -408,6 +491,7 @@ export function CenterChat() {
 
                       if (!res.ok) {
                         console.error("Upload failed:", res.statusText);
+                        showToast("Internal Server Error. Please try again.");
                       } else {
                         // Get the uploaded file URL and set it as current PDF
                         const uploadData = await res.json();
@@ -455,6 +539,7 @@ export function CenterChat() {
                       }
                     } catch (error) {
                       console.error("Error uploading file:", error);
+                      showToast("Upload failed. Please try again.");
                     } finally {
                       setUploading(false);
                       if (fileInputRef.current) fileInputRef.current.value = "";
