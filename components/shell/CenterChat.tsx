@@ -7,6 +7,7 @@ import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
 import { useAuthStore } from "@/store/auth";
 import { useChatStore } from "@/store/chat";
+import { useQuizStore } from "@/store/quiz";
 import { YouTubeRecommendations, YouTubeRecommendationsCompact } from "@/components/youtube/YouTubeRecommendations";
 import { YouTubeRecommendationsLoader as CompactLoader } from "@/components/youtube/YouTubeRecommendationsLoader";
 
@@ -39,6 +40,7 @@ export function CenterChat() {
   const [youtubeVideos, setYoutubeVideos] = React.useState<any[]>([]);
   const [youtubeTopics, setYoutubeTopics] = React.useState<string[]>([]);
   const [loadingYoutube, setLoadingYoutube] = React.useState(false);
+  const [generateQuiz, setGenerateQuiz] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -47,6 +49,7 @@ export function CenterChat() {
   const { setRightPanelOpen, rightPanelOpen } = useUiStore();
   const { user } = useAuthStore();
   const { chatId, setChatId, messages, addMessage, startAssistantMessage, appendAssistantDelta, setAssistantCitations } = useChatStore();
+  const { config, setCurrentQuiz, setGenerating } = useQuizStore();
 
   // Fetch YouTube recommendations
   const fetchYouTubeRecommendations = async (pdfId?: number, currentQuestion?: string) => {
@@ -229,14 +232,57 @@ export function CenterChat() {
       <div className="border-t p-3">
         <form
           className="flex items-end justify-center"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             const content = value.trim();
             if (!content) return;
+            
+            // Check if quiz generation is requested
+            if (generateQuiz && current?.id) {
+              try {
+                setGenerating(true);
+                const res = await fetch('/api/quiz/generate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                    pdfId: current.id,
+                    config: { ...config, difficulty: "auto" }
+                  }),
+                });
+                
+                if (!res.ok) {
+                  throw new Error('Failed to generate quiz');
+                }
+                
+                const data = await res.json();
+                setCurrentQuiz({
+                  id: data.quizId,
+                  pdfId: current.id,
+                  pdfName: current.name,
+                  config: { ...config, difficulty: "auto" },
+                  questions: data.questions,
+                  createdAt: new Date().toISOString()
+                });
+                
+                setValue("");
+                setGenerateQuiz(false);
+                setTimeout(adjustHeight, 0);
+                return;
+              } catch (error) {
+                console.error('Quiz generation error:', error);
+                alert('Failed to generate quiz. Please try again.');
+                setGenerating(false);
+                return;
+              }
+            }
+            
+            // Normal chat flow
             // Allow chatting without a PDF; only pass pdfId if present
             // Add user message locally
             addMessage({ id: `${Date.now()}-user`, role: "user", content, createdAt: Date.now() });
             setValue("");
+            setGenerateQuiz(false);
             // Reset textarea height after clearing value
             setTimeout(adjustHeight, 0);
 
@@ -286,6 +332,22 @@ export function CenterChat() {
           }}
         >
           <div className="w-full max-w-4xl">
+            {/* Quiz Generation Checkbox */}
+            {current?.id && (
+              <div className="mb-3 flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="generate-quiz"
+                  checked={generateQuiz}
+                  onChange={(e) => setGenerateQuiz(e.target.checked)}
+                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                />
+                <label htmlFor="generate-quiz" className="text-sm text-muted-foreground">
+                  Generate quiz from this topic
+                </label>
+              </div>
+            )}
+            
             <div className={`relative rounded-xl border px-3 py-2 shadow-sm bg-white focus-within:ring-2 focus-within:ring-zinc-200`}>
               <textarea
                 ref={textareaRef}
