@@ -34,6 +34,15 @@ export function YouTubeRecommendations({
   className 
 }: YouTubeRecommendationsProps) {
   const [loading, setLoading] = React.useState(false);
+  const uniqueVideos = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (videos || []).filter((v) => {
+      if (!v || !v.videoId) return false;
+      if (seen.has(v.videoId)) return false;
+      seen.add(v.videoId);
+      return true;
+    });
+  }, [videos]);
 
   const handleVideoClick = async (video: YouTubeVideo) => {
     setLoading(true);
@@ -125,7 +134,7 @@ export function YouTubeRecommendations({
 
       {/* Video Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {videos.map((video) => (
+        {uniqueVideos.map((video) => (
           <Card 
             key={video.videoId} 
             className="group cursor-pointer transition-all hover:shadow-md"
@@ -208,7 +217,16 @@ export function YouTubeRecommendationsCompact({
   onVideoClick?: (videoId: string) => void;
   className?: string;
 }) {
-  if (videos.length === 0) return null;
+  const uniqueVideos = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (videos || []).filter((v) => {
+      if (!v || !v.videoId) return false;
+      if (seen.has(v.videoId)) return false;
+      seen.add(v.videoId);
+      return true;
+    });
+  }, [videos]);
+  if (uniqueVideos.length === 0) return null;
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -218,7 +236,7 @@ export function YouTubeRecommendationsCompact({
       </div>
       
       <div className="grid gap-2">
-        {videos.slice(0, 3).map((video) => (
+        {uniqueVideos.slice(0, 3).map((video) => (
           <div
             key={video.videoId}
             className="flex items-center gap-3 p-2 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"

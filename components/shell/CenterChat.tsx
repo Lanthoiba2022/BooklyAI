@@ -56,6 +56,9 @@ export function CenterChat() {
   const { isStreaming, setStreaming } = useChatStore();
   const { resetQuiz } = useQuizStore();
   const { showToast, Toast } = useToast();
+  // Track deferred YouTube fetch when chatId isn't available yet
+  const lastPromptRef = React.useRef<string>("");
+  const pendingYoutubeFetchRef = React.useRef<boolean>(false);
 
   // Fetch YouTube recommendations
   const fetchYouTubeRecommendations = async (pdfId?: number, currentQuestion?: string) => {
@@ -96,7 +99,7 @@ export function CenterChat() {
   // Load previously saved persistent YouTube recommendations for this user
   // This is used to render existing recommendations in chat history without refetching/generating
   const loadPersistentYouTubeRecommendations = React.useCallback(async () => {
-    if (!isAuthenticated || !enableYoutube) return;
+    if (!isAuthenticated) return;
     setLoadingYoutube(true);
     try {
       const res = await fetch('/api/youtube/persistent', { credentials: 'include' });
@@ -111,24 +114,32 @@ export function CenterChat() {
     } finally {
       setLoadingYoutube(false);
     }
-  }, [isAuthenticated, enableYoutube]);
+  }, [isAuthenticated]);
 
-  // Extract video IDs from the latest assistant recommendation message in the current chat
+  // Extract video IDs from ALL assistant recommendation messages in the current chat
   const extractRecommendedVideoIds = React.useCallback((): string[] => {
     const msgs = Array.isArray(messages) ? messages : [];
-    for (let i = msgs.length - 1; i >= 0; i--) {
+    const ids = new Set<string>();
+
+    for (let i = 0; i < msgs.length; i++) {
       const m = msgs[i];
       if (m.role !== 'assistant' || !m.content) continue;
-      if (!m.content.includes('https://www.youtube.com/watch?v=')) continue;
-      const ids = new Set<string>();
-      const regex = /https?:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/g;
+
+      // Match standard YouTube watch URLs
+      const watchRegex = /https?:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/g;
       let match: RegExpExecArray | null;
-      while ((match = regex.exec(m.content)) !== null) {
+      while ((match = watchRegex.exec(m.content)) !== null) {
         ids.add(match[1]);
       }
-      if (ids.size > 0) return Array.from(ids);
+
+      // Also match youtu.be short links
+      const shortRegex = /https?:\/\/youtu\.be\/([a-zA-Z0-9_-]+)/g;
+      while ((match = shortRegex.exec(m.content)) !== null) {
+        ids.add(match[1]);
+      }
     }
-    return [];
+
+    return Array.from(ids);
   }, [messages]);
 
   // Load persisted recommendations for the current chat based on extracted video IDs
@@ -174,13 +185,8 @@ export function CenterChat() {
     setIsCheckingAuth(false);
   }, [user]);
 
-  // Disable auto-fetch on checkbox/PDF change; only fetch after a user sends a message
-  React.useEffect(() => {
-    if (!enableYoutube) {
-      setYoutubeVideos([]);
-      setYoutubeTopics([]);
-    }
-  }, [enableYoutube]);
+  // Note: Disabling YouTube recommendations should stop new fetches only.
+  // Do not clear already fetched videos/topics so they remain visible.
 
   // When a chat is opened or switched, load previously saved recs scoped to that chat
   React.useEffect(() => {
@@ -195,6 +201,28 @@ export function CenterChat() {
       loadChatHistoryYouTubeRecommendations();
     }
   }, [messages, chatId, loadChatHistoryYouTubeRecommendations]);
+
+  // Backfill: If a saved chat has no YouTube links in messages, generate and persist once
+  React.useEffect(() => {
+    if (!isAuthenticated || !chatId) return;
+    const ids = extractRecommendedVideoIds();
+    if (ids.length > 0) return;
+    (async () => {
+      try {
+        setLoadingYoutube(true);
+        const res = await fetch(`/api/youtube?chatId=${chatId}&maxResults=5`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setYoutubeVideos(Array.isArray(data.recommendations) ? data.recommendations : []);
+          setYoutubeTopics(Array.isArray(data.topics) ? data.topics : []);
+        }
+      } catch (e) {
+        console.error('Backfill YouTube recommendations failed:', e);
+      } finally {
+        setLoadingYoutube(false);
+      }
+    })();
+  }, [isAuthenticated, chatId, extractRecommendedVideoIds]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
@@ -371,9 +399,15 @@ export function CenterChat() {
               try {
                 startAssistantMessage();
                 setStreaming(true);
-                // Trigger YouTube recommendations synchronously when sending the chat (if enabled)
+                // Trigger YouTube recommendations when sending the chat (if enabled)
+                // If chatId isn't available yet, defer until it arrives from the stream
                 if (enableYoutube) {
-                  fetchYouTubeRecommendations(current?.id ?? undefined, content);
+                  if (chatId) {
+                    fetchYouTubeRecommendations(current?.id ?? undefined, content);
+                  } else {
+                    lastPromptRef.current = content;
+                    pendingYoutubeFetchRef.current = true;
+                  }
                 }
                 const res = await fetch('/api/chat', {
                   method: 'POST',
@@ -406,7 +440,14 @@ export function CenterChat() {
                         appendAssistantDelta(`\n[Error] ${msg.data}`);
                         setStreaming(false);
                       } else if (msg.type === 'chat') {
-                        if (msg.data?.chatId) setChatId(msg.data.chatId);
+                        if (msg.data?.chatId) {
+                          setChatId(msg.data.chatId);
+                          // Flush any deferred YouTube fetch now that chatId exists
+                          if (enableYoutube && pendingYoutubeFetchRef.current) {
+                            fetchYouTubeRecommendations(current?.id ?? undefined, lastPromptRef.current);
+                            pendingYoutubeFetchRef.current = false;
+                          }
+                        }
                       }
                     } catch {}
                   }
