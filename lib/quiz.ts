@@ -132,6 +132,7 @@ export async function generateQuizFromPDF(
 ): Promise<{ quizId: number; questions: Question[] }> {
   const { geminiApiKey } = getEnv();
   if (!geminiApiKey) throw new Error("GEMINI_API missing");
+  if (!supabaseServer) throw new Error("Server not configured");
 
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
@@ -141,7 +142,7 @@ export async function generateQuizFromPDF(
   const queryEmbedding = await embedText(randomQuery);
   if (!queryEmbedding) throw new Error("Failed to embed query");
 
-  let chunks = await searchChunks(pdfId, queryEmbedding, 10, 10);
+  let chunks: RetrievedChunk[] = await searchChunks(pdfId, queryEmbedding, 10, 10) as RetrievedChunk[];
   
   // If no chunks found, try to get any chunks from the PDF
   if (chunks.length === 0) {
@@ -177,7 +178,7 @@ export async function generateQuizFromPDF(
       if (error) {
         console.error("Direct chunk query error:", error);
       } else if (directChunks && directChunks.length > 0) {
-        chunks = directChunks;
+        chunks = (directChunks as unknown as RetrievedChunk[]) || [];
         console.log(`Found ${chunks.length} chunks via direct query`);
       }
     }
@@ -194,7 +195,7 @@ export async function generateQuizFromPDF(
   }
 
   // Build context for quiz generation
-  const context = chunks.map((c, i) => 
+  const context = chunks.map((c: RetrievedChunk, i: number) => 
     `[Chunk ${i + 1} | Page ${c.page}${c.line_start ? `, Lines ${c.line_start}-${c.line_end || c.line_start}` : ''}]\n${c.text}`
   ).join("\n\n");
 
@@ -245,6 +246,27 @@ Focus on key physics concepts, laws, and principles from the content.`;
     const quizData = safeParseJSON(text);
     
     // Validate and format questions
+    // Fetch page_count to clamp page numbers into valid range
+    let pageCount: number | null = null;
+    if (supabaseServer) {
+      try {
+        const { data: pdfRow } = await supabaseServer
+          .from("pdfs")
+          .select("page_count")
+          .eq("id", pdfId)
+          .maybeSingle();
+        pageCount = (pdfRow as any)?.page_count ?? null;
+      } catch {}
+    }
+
+    const clampPage = (p: number | undefined | null): number => {
+      const page = typeof p === 'number' && isFinite(p) ? Math.floor(p) : 1;
+      if (pageCount && pageCount > 0) {
+        return Math.max(1, Math.min(page, pageCount));
+      }
+      return Math.max(1, page);
+    };
+
     const questions: Question[] = quizData.questions.map((q: any, index: number) => ({
       id: index + 1,
       type: q.type,
@@ -252,7 +274,7 @@ Focus on key physics concepts, laws, and principles from the content.`;
       options: q.options || undefined,
       correctAnswer: q.correctAnswer,
       explanation: q.explanation,
-      page: q.page || 1,
+      page: clampPage(q.page),
       lineStart: q.lineStart || undefined,
       lineEnd: q.lineEnd || undefined,
       topic: q.topic || "General"
@@ -281,7 +303,6 @@ Focus on key physics concepts, laws, and principles from the content.`;
     };
   } catch (error) {
     console.error("Quiz generation error:", error);
-    console.error("Response text:", text);
     throw new Error("Failed to generate quiz");
   }
 }
@@ -549,8 +570,8 @@ export async function getUserProgress(userId: number): Promise<ProgressMetrics> 
     const topicScores: Record<string, number[]> = {};
     const accuracyByTopic: Record<string, number> = {};
     
-    attempts.forEach(attempt => {
-      const config = attempt.quiz?.config;
+    attempts.forEach((attempt: any) => {
+      const config = attempt?.quiz?.config;
       if (config?.questions) {
         config.questions.forEach((q: Question) => {
           if (!topicScores[q.topic]) {

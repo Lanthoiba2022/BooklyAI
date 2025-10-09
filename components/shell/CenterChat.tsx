@@ -209,13 +209,25 @@ export function CenterChat() {
                         const { jumpToPage } = usePdfStore.getState();
                         if (typeof jumpToPage === 'function') {
                           // c.page is 1-based from backend; ensure safe
-                          const p0 = Math.max(0, (c.page ?? 1) - 1);
+                          const total = usePdfStore.getState().current?.totalPages ?? null;
+                          const page1 = Math.max(1, (c as any).page ?? (c as any).pg ?? 1);
+                          const clamped1 = total && total > 0 ? Math.min(page1, total) : page1;
+                          const p0 = Math.max(0, clamped1 - 1);
                           jumpToPage(p0);
                           setRightPanelOpen(true);
                         }
                       } catch {}
                     }}>
-                      (p. {c.page}) {c.text ? `— ${c.text.slice(0, 80)}…` : ''}
+                      {(() => {
+                        // Show page and lines if available; else fall back to excerpt marker only
+                        const ls = (c as any).line_start ?? (c as any).lineStart ?? undefined;
+                        const le = (c as any).line_end ?? (c as any).lineEnd ?? ls;
+                        const total = usePdfStore.getState().current?.totalPages ?? null;
+                        const rawPage = (c as any).page ?? (c as any).pg ?? 1;
+                        const page = total && total > 0 ? Math.min(Math.max(1, rawPage), total) : Math.max(1, rawPage);
+                        const linePart = ls !== undefined ? `, L ${ls}${le !== undefined && le !== ls ? `-${le}` : ''}` : '';
+                        return `(p. ${page}${linePart}) ${c.text ? `— ${c.text.slice(0, 80)}…` : ''}`;
+                      })()}
                     </button>
                   ))}
                 </div>

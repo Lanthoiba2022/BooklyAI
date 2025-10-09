@@ -69,6 +69,45 @@ function chunkTextByPage(pages: string[]): Chunk[] {
   return chunks;
 }
 
+// Extract page texts using page-aware rendering; fall back to form-feed split
+async function extractPages(buf: Buffer): Promise<string[]> {
+  // Ensure module is loaded
+  if (!pdfParse) {
+    const mod = await import("pdf-parse/lib/pdf-parse.js");
+    pdfParse = (mod as any).default ?? (mod as any);
+  }
+
+  // Try page-aware extraction using pagerender
+  try {
+    const pages: string[] = [];
+    const mod = await import("pdf-parse/lib/pdf-parse.js");
+    const pdfParseLocal: any = (mod as any).default ?? (mod as any);
+    const options = {
+      pagerender: async (pageData: any) => {
+        const textContent = await pageData.getTextContent({
+          normalizeWhitespace: false,
+          disableCombineTextItems: false,
+        });
+        const strings = textContent.items.map((it: any) => (it.str ?? "")).filter(Boolean);
+        const pageText = strings.join("\n");
+        pages.push(pageText);
+        return pageText;
+      },
+    } as any;
+
+    // Execute pdf-parse which will invoke pagerender per page
+    await pdfParseLocal(buf, options);
+    if (pages.length > 0) return pages;
+  } catch (e) {
+    console.warn("[API] /api/pdf/process: pagerender extraction failed, falling back", e);
+  }
+
+  // Fallback: simple form-feed split
+  const parsed = await pdfParse(buf);
+  const ffPages = (parsed?.text || '').split('\f');
+  return ffPages.length > 0 ? ffPages : [parsed?.text || ""];
+}
+
 export async function POST(req: NextRequest) {
   console.log("[API] /api/pdf/process POST: start");
   if (!supabaseServer) return NextResponse.json({ error: "Server not configured" }, { status: 500 });
@@ -127,9 +166,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Downloaded file was empty' }, { status: 500 });
     }
     
-    const parsed = await pdfParse(buf);
-    // pdf-parse returns combined text; attempt page split via metadata if available
-    const pages = (parsed?.text || '').split('\f');
+    const pages = await extractPages(buf);
     console.log("[API] /api/pdf/process POST: parsed pages", pages.length);
 
     const chunks = chunkTextByPage(pages);
