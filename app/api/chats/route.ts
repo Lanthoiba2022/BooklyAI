@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
         id,
         created_at,
         pdf_id,
-        pdfs!inner(name)
+        pdfs!left(name)
       `)
       .eq("owner_id", dbUser.id)
       .order("created_at", { ascending: false })
@@ -73,5 +73,57 @@ export async function GET(req: NextRequest) {
   } catch (e: any) {
     console.error("[API] /api/chats GET: error", e?.message || e);
     return NextResponse.json({ chats: [] });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  console.log("[API] /api/chats DELETE: start");
+  const { user, headers } = await getAuthenticatedUserFromCookies(req);
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const dbUser = await ensureUserProvisioned(user as any);
+  if (!dbUser) {
+    return NextResponse.json({ error: "User not provisioned" }, { status: 500 });
+  }
+
+  if (!supabaseServer) {
+    return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+  }
+
+  const url = new URL(req.url);
+  const chatId = url.searchParams.get("chatId");
+  if (!chatId || isNaN(Number(chatId))) {
+    return NextResponse.json({ error: "Missing or invalid chatId" }, { status: 400 });
+  }
+
+  try {
+    // Verify ownership
+    const { data: chat, error: chatError } = await supabaseServer
+      .from("chats")
+      .select("id, owner_id")
+      .eq("id", chatId)
+      .single();
+    if (chatError || !chat || chat.owner_id !== dbUser.id) {
+      return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    // Delete (messages cascade via FK)
+    const { error: delError } = await supabaseServer
+      .from("chats")
+      .delete()
+      .eq("id", chatId);
+    if (delError) {
+      console.error("[API] /api/chats DELETE: error", delError.message);
+      return NextResponse.json({ error: "Failed to delete chat" }, { status: 500 });
+    }
+
+    const res = NextResponse.json({ ok: true });
+    headers.forEach((v, k) => res.headers.append(k, v));
+    return res;
+  } catch (e: any) {
+    console.error("[API] /api/chats DELETE: error", e?.message || e);
+    return NextResponse.json({ error: "Failed to delete chat" }, { status: 500 });
   }
 }

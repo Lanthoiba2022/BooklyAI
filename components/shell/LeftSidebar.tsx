@@ -1,6 +1,6 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { Plus, Files, BarChart3, History, HelpCircle } from "lucide-react";
+import { Plus, Files, BarChart3, History, HelpCircle, Trash2 } from "lucide-react";
 import { AuthStatus } from "@/components/auth/AuthStatus";
 import { useUiStore } from "@/store/ui";
 import { supabaseBrowser } from "@/lib/supabaseClient";
@@ -23,7 +23,7 @@ export function LeftSidebar() {
   const [chats, setChats] = React.useState<ChatItem[]>([]);
   const [loadingChats, setLoadingChats] = React.useState(false);
   const { user } = useAuthStore();
-  const { setChatId, reset } = useChatStore();
+  const { setChatId, setMessages, reset } = useChatStore();
   const { resetQuiz } = useQuizStore();
 
   // React immediately to global auth changes
@@ -116,7 +116,7 @@ export function LeftSidebar() {
       if (res.ok) {
         const data = await res.json();
         setChatId(chatId);
-        // TODO: Load messages into chat store
+        setMessages(Array.isArray(data.messages) ? data.messages : []);
         setCenterView("chat");
       }
     } catch (error) {
@@ -127,6 +127,25 @@ export function LeftSidebar() {
   const handleGenerateQuiz = () => {
     resetQuiz();
     setCenterView("quiz");
+  };
+
+  const handleDeleteChat = async (chatId: number) => {
+    try {
+      const res = await fetch(`/api/chats?chatId=${chatId}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) {
+        setChats((prev) => prev.filter((c) => c.id !== chatId));
+        // If deleting currently open chat, reset chat view
+        try {
+          const { chatId: currentId, reset } = useChatStore.getState();
+          if (currentId === chatId) {
+            reset();
+            setCenterView("chat");
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.error('Failed to delete chat', e);
+    }
   };
 
   const handleDashboardClick = () => {
@@ -178,24 +197,32 @@ export function LeftSidebar() {
               <div className="text-xs text-zinc-400 px-1">No chats yet</div>
             ) : (
               chats.map((chat) => (
-                <Button 
-                  key={chat.id}
-                  variant="ghost" 
-                  className="w-full justify-start text-left h-auto py-2"
-                  onClick={() => handleChatClick(chat.id)}
-                >
-                  <History className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium truncate">
-                      {chat.pdfName ? `Chat about ${chat.pdfName}` : 'General Chat'}
-                    </div>
-                    {chat.lastMessage && (
-                      <div className="text-xs text-zinc-500 truncate">
-                        {chat.lastMessage}
+                <div key={chat.id} className="group relative">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start text-left h-auto py-2 pr-9"
+                    onClick={() => handleChatClick(chat.id)}
+                  >
+                    <History className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium truncate">
+                        {chat.pdfName ? `Chat about ${chat.pdfName}` : 'General Chat'}
                       </div>
-                    )}
-                  </div>
-                </Button>
+                      {chat.lastMessage && (
+                        <div className="text-xs text-zinc-500 truncate">
+                          {chat.lastMessage}
+                        </div>
+                      )}
+                    </div>
+                  </Button>
+                  <button
+                    aria-label="Delete chat"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center h-6 w-6 text-zinc-500 hover:text-red-600"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               ))
             )}
           </div>

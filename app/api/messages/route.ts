@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     // Get messages for this chat
     const { data: messages, error } = await supabaseServer
       .from("messages")
-      .select("id, role, content, created_at, citations")
+      .select("id, role, content, created_at")
       .eq("chat_id", chatId)
       .order("created_at", { ascending: true });
 
@@ -58,7 +58,8 @@ export async function GET(req: NextRequest) {
       role: msg.role as "user" | "assistant" | "system",
       content: msg.content,
       createdAt: new Date(msg.created_at).getTime(),
-      citations: msg.citations || undefined,
+      // No citations persisted in DB; keep field undefined for UI compatibility
+      citations: undefined,
     }));
 
     console.log("[API] /api/messages GET: found", formattedMessages.length, "messages for chat", chatId);

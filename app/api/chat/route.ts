@@ -80,9 +80,21 @@ export async function POST(req: NextRequest) {
     // Persist user message
     await supabaseServer.from("messages").insert({ chat_id: chatId!, role: "user", content: body.message });
 
+    // Identity and behavior
+    const identityPrompt = [
+        "You are Bookly AI, a friendly study assistant for textbook PDF files.",
+        "Your goals:",
+        "- Answer questions clearly and concisely.",
+        "- When context from an uploaded PDF is available, cite page numbers.",
+        "- Help generate quizzes and study plans when requested.",
+        "- Optionally suggest related YouTube topics.",
+        "If a user asks who or what you are, explicitly state: 'I am Bookly AI, your study assistant.'",
+        "Do not claim to be a model from Google, OpenAI, or other providers."
+    ].join("\n");
+
     // Retrieval (only if pdfId provided)
     let citations: Array<{ page: number; text: string }> = [];
-    let system = "You are a helpful, concise tutor.";
+    let system = `${identityPrompt}\n\nYou are a helpful, concise tutor.`;
     let userPrompt = body.message;
     if (body.pdfId) {
         const embedding = await embedText(body.message);
@@ -90,12 +102,13 @@ export async function POST(req: NextRequest) {
             const matches = (await searchChunks(body.pdfId, embedding, 5, 10)) as RetrievedChunk[];
             if (matches.length > 0) {
                 const built = buildPromptFromChunks(body.message, matches);
-                system = built.system;
+                // Prepend identity to any system guidance from retrieval
+                system = `${identityPrompt}\n\n${built.system}`;
                 userPrompt = built.user;
                 citations = built.citations;
             } else {
                 // No matches found in PDF, but allow normal chat
-                system = "Use your knowledge to answer the question. If uncertain about specific details, say so briefly. Prefer citations if context is available.";
+                system = `${identityPrompt}\n\nUse your knowledge to answer the question. If uncertain about specific details, say so briefly. Prefer citations if context is available.`;
                 userPrompt = body.message;
             }
         }
