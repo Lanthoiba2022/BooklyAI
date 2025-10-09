@@ -40,7 +40,7 @@ export function MainLayout({
             unoptimized
             priority
           />
-          <span className="font-semibold tracking-tight">Bookly</span>
+          <span className="font-semibold tracking-tight">Bookly AI</span>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
