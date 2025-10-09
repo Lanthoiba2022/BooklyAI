@@ -49,17 +49,6 @@ type ProgressData = {
   improvement: number;
 };
 
-type WeaknessData = {
-  weaknesses: Array<{
-    topic: string;
-    incorrectCount: number;
-    totalAttempts: number;
-    accuracy: number;
-    commonMistakes: string[];
-    lastIncorrect: string;
-  }>;
-  totalIncorrect: number;
-};
 
 type QuizHistoryItem = {
   id: number;
@@ -83,18 +72,13 @@ type QuizHistoryItem = {
 export function ProgressDashboard() {
   const { setCenterView } = useUiStore();
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
-  const [weaknessData, setWeaknessData] = useState<WeaknessData | null>(null);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showYouTube, setShowYouTube] = useState(false);
-  const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
-  const [loadingYouTube, setLoadingYouTube] = useState(false);
   const [loadingQuizHistory, setLoadingQuizHistory] = useState(false);
   const [selectedQuizAttempt, setSelectedQuizAttempt] = useState<number | null>(null);
 
   useEffect(() => {
     fetchProgressData();
-    fetchWeaknessData();
     fetchQuizHistory();
   }, []);
 
@@ -114,19 +98,6 @@ export function ProgressDashboard() {
     }
   };
 
-  const fetchWeaknessData = async () => {
-    try {
-      const response = await fetch("/api/progress/weaknesses", {
-        credentials: "include"
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setWeaknessData(data);
-      }
-    } catch (error) {
-      console.error("Error fetching weakness data:", error);
-    }
-  };
 
   const fetchQuizHistory = async () => {
     setLoadingQuizHistory(true);
@@ -149,25 +120,6 @@ export function ProgressDashboard() {
     }
   };
 
-  const fetchYouTubeRecommendations = async () => {
-    if (showYouTube) return; // Already showing
-
-    setLoadingYouTube(true);
-    try {
-      const response = await fetch("/api/youtube?maxResults=5", {
-        credentials: "include"
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setYoutubeVideos(data.recommendations || []);
-        setShowYouTube(true);
-      }
-    } catch (error) {
-      console.error("Error fetching YouTube recommendations:", error);
-    } finally {
-      setLoadingYouTube(false);
-    }
-  };
 
   const handleClose = () => {
     setCenterView("chat");
@@ -371,83 +323,6 @@ export function ProgressDashboard() {
         </div>
       </Card>
 
-      {/* Weaknesses Analysis */}
-      {weaknessData && weaknessData.weaknesses.length > 0 && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Areas for Improvement</h3>
-            <Button
-              onClick={fetchYouTubeRecommendations}
-              disabled={loadingYouTube}
-              variant="outline"
-              size="sm"
-            >
-              {loadingYouTube ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <BookOpen className="h-4 w-4 mr-2" />
-              )}
-              Get Study Resources
-            </Button>
-          </div>
-          
-          <div className="space-y-4">
-            {weaknessData.weaknesses.map((weakness, index) => (
-              <div key={index} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">{weakness.topic}</span>
-                  <Badge variant="destructive">
-                    {Math.round(weakness.accuracy)}% accuracy
-                  </Badge>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {weakness.incorrectCount} incorrect out of {weakness.totalAttempts} attempts
-                </div>
-                {weakness.commonMistakes.length > 0 && (
-                  <div className="mt-2">
-                    <span className="text-xs font-medium text-muted-foreground">Common mistakes:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {weakness.commonMistakes.map((mistake, i) => (
-                        <Badge key={i} variant="outline" className="text-xs">
-                          {mistake.slice(0, 30)}...
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* YouTube Recommendations */}
-          {showYouTube && youtubeVideos.length > 0 && (
-            <div className="mt-6 pt-6 border-t">
-              <h4 className="text-md font-semibold mb-4">Recommended Study Videos</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {youtubeVideos.map((video) => (
-                  <div key={video.videoId} className="border rounded-lg p-4">
-                    <div className="aspect-video bg-gray-100 rounded mb-2 flex items-center justify-center">
-                      <img 
-                        src={video.thumbnailUrl} 
-                        alt={video.title}
-                        className="w-full h-full object-cover rounded"
-                      />
-                    </div>
-                    <h5 className="font-medium text-sm line-clamp-2 mb-1">{video.title}</h5>
-                    <p className="text-xs text-muted-foreground">{video.channelTitle}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-muted-foreground">{video.duration}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {Math.round(video.relevanceScore * 100)}% relevant
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
 
       {/* Quiz History */}
       <Card className="p-6">

@@ -67,16 +67,25 @@ export async function searchYouTubeVideos(
 
     const detailsData = await detailsResponse.json();
 
-    const videos: YouTubeVideo[] = detailsData.items.map((item: any) => ({
-      videoId: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description,
-      thumbnailUrl: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-      channelTitle: item.snippet.channelTitle,
-      duration: item.contentDetails.duration,
-      viewCount: parseInt(item.statistics.viewCount || '0'),
-      publishedAt: item.snippet.publishedAt,
-    }));
+    const videos: YouTubeVideo[] = detailsData.items.map((item: any) => {
+      // Get the best available thumbnail
+      const thumbnails = item.snippet.thumbnails;
+      let thumbnailUrl = thumbnails.high?.url || 
+                        thumbnails.medium?.url || 
+                        thumbnails.default?.url ||
+                        `https://img.youtube.com/vi/${item.id}/mqdefault.jpg`; // Fallback to YouTube's default
+
+      return {
+        videoId: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        thumbnailUrl,
+        channelTitle: item.snippet.channelTitle,
+        duration: item.contentDetails.duration,
+        viewCount: parseInt(item.statistics.viewCount || '0'),
+        publishedAt: item.snippet.publishedAt,
+      };
+    });
 
     return {
       videos,
@@ -242,6 +251,10 @@ export function rankVideosByRelevance(
       relevanceScore += 3;
     }
 
-    return { ...video, relevanceScore };
+    // Normalize relevance score to 0-1 range (0-100%)
+    // Maximum possible score is around 50 (10+5+15+5+3+some topic matches)
+    const normalizedScore = Math.min(1, relevanceScore / 50);
+
+    return { ...video, relevanceScore: normalizedScore };
   }).sort((a, b) => (b as any).relevanceScore - (a as any).relevanceScore);
 }
