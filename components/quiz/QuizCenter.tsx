@@ -25,7 +25,7 @@ export function QuizCenter() {
   } = useQuizStore();
   
   const { setCenterView } = useUiStore();
-  const { jumpToPage, setRightPanelOpen } = usePdfStore();
+  const { jumpToPage } = usePdfStore();
 
   const [timeStarted, setTimeStarted] = useState<number | null>(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
@@ -67,6 +67,8 @@ export function QuizCenter() {
     if (!currentQuiz) return;
 
     try {
+      // Show submitting state while evaluation happens on the server
+      useQuizStore.getState().setSubmitting(true);
       const response = await fetch("/api/quiz/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,6 +89,8 @@ export function QuizCenter() {
     } catch (error) {
       console.error("Quiz submission error:", error);
       alert("Failed to submit quiz. Please try again.");
+    } finally {
+      useQuizStore.getState().setSubmitting(false);
     }
   };
 
@@ -100,6 +104,25 @@ export function QuizCenter() {
   const currentQuestion = currentQuiz?.questions[currentQuestionIndex];
   const progress = currentQuiz ? ((currentQuestionIndex + 1) / currentQuiz.questions.length) * 100 : 0;
   const isLastQuestion = currentQuestionIndex === (currentQuiz?.questions.length || 0) - 1;
+
+  // Rotate loading messages while submitting (hooks must be before any return)
+  const loadingMessages = [
+    "Evaluating your answers...",
+    "AI is generating personalized feedback...",
+    "Preparing detailed results...",
+  ];
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isSubmitting) {
+      setLoadingMessageIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setLoadingMessageIndex((i) => (i + 1) % loadingMessages.length);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [isSubmitting]);
 
   // Show quiz configuration if no quiz is active
   if (!currentQuiz && !quizResults) {
@@ -142,6 +165,18 @@ export function QuizCenter() {
             <p className="text-muted-foreground">Review your performance and learn from feedback</p>
           </div>
           <QuizResults />
+        </div>
+      </div>
+    );
+  }
+
+  // Show evaluation loader while submitting
+  if (isSubmitting) {
+    return (
+      <div className="h-full flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="h-8 w-8 rounded-full border-2 border-muted-foreground border-t-foreground animate-spin" />
+          <div className="text-sm text-muted-foreground">{loadingMessages[loadingMessageIndex]}</div>
         </div>
       </div>
     );

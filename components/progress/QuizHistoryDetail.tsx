@@ -97,7 +97,7 @@ export function QuizHistoryDetail({ attemptId, onBack }: QuizHistoryDetailProps)
 
   const fetchWeaknessData = async () => {
     try {
-      const response = await fetch("/api/progress/weaknesses", {
+      const response = await fetch(`/api/progress/weaknesses?quizAttemptId=${attemptId}`, {
         credentials: "include"
       });
       if (response.ok) {

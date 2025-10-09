@@ -99,20 +99,35 @@ export default function SignInPage() {
       });
     }
 
-    setLoading(false);
-
-    // Small delay to ensure store propagation
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Navigate to intended destination or home
-    const url = new URL(window.location.href);
-    const redirect = url.searchParams.get("redirect") || "/";
-    if (typeof window !== 'undefined') {
-      window.location.href = redirect;
-    } else {
+    try {
+      // Ensure server has HttpOnly auth cookies set BEFORE first redirect
+      const { data: sessionData } = await supabaseBrowser.auth.getSession();
+      const at = sessionData.session?.access_token;
+      const rt = sessionData.session?.refresh_token;
+      if (at && rt) {
+        await fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ access_token: at, refresh_token: rt }),
+        }).catch(() => {});
+      }
+    } finally {
+      // Navigate to intended destination or home
+      const url = new URL(window.location.href);
+      const redirect = url.searchParams.get("redirect") || "/";
+      // Keep loading=true to avoid flicker of the form before navigation
       router.replace(redirect);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-background p-4">
+        <div className="text-sm text-muted-foreground">Completing sign-in...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-background p-4">
