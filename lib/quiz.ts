@@ -3,6 +3,72 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseServer } from "./supabaseServer";
 import { embedText, searchChunks, RetrievedChunk } from "./rag";
 
+// Utility function to safely parse JSON from Gemini responses
+function safeParseJSON(text: string): any {
+  // Try multiple strategies to extract and parse JSON
+  
+  // Strategy 1: Look for JSON object boundaries
+  let jsonText = text;
+  const jsonStart = text.indexOf('{');
+  const jsonEnd = text.lastIndexOf('}');
+  
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    jsonText = text.substring(jsonStart, jsonEnd + 1);
+  } else {
+    throw new Error("No valid JSON found in response");
+  }
+  
+  // Strategy 2: Try parsing as-is first
+  try {
+    return JSON.parse(jsonText);
+  } catch (firstError) {
+    console.log("First JSON parse attempt failed, trying cleanup...");
+  }
+  
+  // Strategy 3: Clean up common JSON issues (fixed - removed problematic \b replacement)
+  let cleanedJson = jsonText
+    .replace(/\n/g, '\\n')   // Convert newlines to escaped
+    .replace(/\t/g, '\\t')   // Convert tabs to escaped
+    .replace(/\r/g, '\\r')   // Convert carriage returns to escaped
+    .replace(/\f/g, '\\f')   // Convert form feeds to escaped
+    .replace(/\v/g, '\\v');  // Convert vertical tabs to escaped
+  
+  try {
+    return JSON.parse(cleanedJson);
+  } catch (secondError) {
+    console.log("Second JSON parse attempt failed, trying regex extraction...");
+  }
+  
+  // Strategy 4: Use regex to extract JSON more aggressively
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch (thirdError) {
+      console.log("Third JSON parse attempt failed");
+    }
+  }
+  
+  // Strategy 5: Try to fix common issues manually
+  try {
+    let fixedJson = jsonText
+      .replace(/,\s*}/g, '}')  // Remove trailing commas
+      .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted keys
+      .replace(/:\s*([^",{\[\s][^,}]*?)(\s*[,}])/g, ': "$1"$2') // Quote unquoted string values
+      .replace(/"([^"]*)"([^"]*)"([^"]*)":/g, '"$1\\"$2\\"$3":') // Escape quotes in string values
+      .replace(/"([^"]*)"([^"]*)"([^"]*)"/g, '"$1\\"$2\\"$3"'); // Escape quotes in standalone strings
+    
+    return JSON.parse(fixedJson);
+  } catch (finalError) {
+    console.error("All JSON parsing strategies failed");
+    console.error("Original text:", text);
+    console.error("Extracted JSON:", jsonText);
+    console.error("Cleaned JSON:", cleanedJson);
+    throw new Error(`JSON parsing failed after all strategies: ${finalError}`);
+  }
+}
+
 export type QuizConfig = {
   mcq: number;
   saq: number;
@@ -75,8 +141,51 @@ export async function generateQuizFromPDF(
   const queryEmbedding = await embedText(randomQuery);
   if (!queryEmbedding) throw new Error("Failed to embed query");
 
-  const chunks = await searchChunks(pdfId, queryEmbedding, 10, 10);
-  if (chunks.length === 0) throw new Error("No content found in PDF");
+  let chunks = await searchChunks(pdfId, queryEmbedding, 10, 10);
+  
+  // If no chunks found, try to get any chunks from the PDF
+  if (chunks.length === 0) {
+    console.log(`No chunks found for PDF ${pdfId}, trying to get any available chunks...`);
+    
+    // Try a broader search with different queries
+    const fallbackQueries = [
+      "text content information data",
+      "chapter section paragraph",
+      "content material information"
+    ];
+    
+    for (const query of fallbackQueries) {
+      const fallbackEmbedding = await embedText(query);
+      if (fallbackEmbedding) {
+        chunks = await searchChunks(pdfId, fallbackEmbedding, 10, 10);
+        if (chunks.length > 0) {
+          console.log(`Found ${chunks.length} chunks using fallback query: ${query}`);
+          break;
+        }
+      }
+    }
+    
+    // If still no chunks, try to get chunks directly from database
+    if (chunks.length === 0 && supabaseServer) {
+      console.log(`Trying direct database query for PDF ${pdfId}...`);
+      const { data: directChunks, error } = await supabaseServer
+        .from("chunks")
+        .select("*")
+        .eq("pdf_id", pdfId)
+        .limit(10);
+      
+      if (error) {
+        console.error("Direct chunk query error:", error);
+      } else if (directChunks && directChunks.length > 0) {
+        chunks = directChunks;
+        console.log(`Found ${chunks.length} chunks via direct query`);
+      }
+    }
+    
+    if (chunks.length === 0) {
+      throw new Error(`No content found in PDF. The PDF may not be processed yet or may not contain extractable text. Please ensure the PDF is uploaded and processed successfully.`);
+    }
+  }
 
   // Determine difficulty if auto
   let difficulty = config.difficulty;
@@ -133,11 +242,7 @@ Focus on key physics concepts, laws, and principles from the content.`;
     const response = await result.response;
     const text = response.text();
     
-    // Extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No valid JSON found in response");
-    
-    const quizData = JSON.parse(jsonMatch[0]);
+    const quizData = safeParseJSON(text);
     
     // Validate and format questions
     const questions: Question[] = quizData.questions.map((q: any, index: number) => ({
@@ -176,6 +281,7 @@ Focus on key physics concepts, laws, and principles from the content.`;
     };
   } catch (error) {
     console.error("Quiz generation error:", error);
+    console.error("Response text:", text);
     throw new Error("Failed to generate quiz");
   }
 }
@@ -237,24 +343,31 @@ Return JSON: {"score": number, "feedback": "string"}`;
     const response = await result.response;
     const text = response.text();
     
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No valid JSON in evaluation");
+    const evaluation = safeParseJSON(text);
     
-    const evaluation = JSON.parse(jsonMatch[0]);
+    // Validate the response structure
+    if (typeof evaluation.score !== 'number' || 
+        evaluation.score < 0 || evaluation.score > 1) {
+      throw new Error("Invalid score in evaluation");
+    }
     
+    // Convert to whole number: 50%+ = 1 (correct), <50% = 0 (incorrect)
+    const isCorrect = evaluation.score >= 0.5;
     return {
-      correct: evaluation.score >= 0.6,
-      score: Math.max(0, Math.min(1, evaluation.score)),
+      correct: isCorrect,
+      score: isCorrect ? 1 : 0,
       feedback: evaluation.feedback || "No feedback provided"
     };
   } catch (error) {
     console.error("SAQ evaluation error:", error);
     // Fallback to keyword matching
     const keywordScore = calculateKeywordScore(userAnswer, correctAnswer);
+    // Convert to whole number: 50%+ = 1 (correct), <50% = 0 (incorrect)
+    const isCorrect = keywordScore >= 0.5;
     return {
-      correct: keywordScore > 0.5,
-      score: keywordScore,
-      feedback: "Evaluation completed using keyword matching"
+      correct: isCorrect,
+      score: isCorrect ? 1 : 0,
+      feedback: "Evaluation completed using keyword matching due to parsing error"
     };
   }
 }
@@ -304,23 +417,30 @@ Return JSON: {
     const response = await result.response;
     const text = response.text();
     
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No valid JSON in evaluation");
+    const evaluation = safeParseJSON(text);
     
-    const evaluation = JSON.parse(jsonMatch[0]);
+    // Validate the response structure
+    if (typeof evaluation.overallScore !== 'number' || 
+        evaluation.overallScore < 0 || evaluation.overallScore > 1) {
+      throw new Error("Invalid overallScore in evaluation");
+    }
     
+    // Convert to whole number: 50%+ = 1 (correct), <50% = 0 (incorrect)
+    const isCorrect = evaluation.overallScore >= 0.5;
     return {
-      correct: evaluation.overallScore >= 0.6,
-      score: Math.max(0, Math.min(1, evaluation.overallScore)),
+      correct: isCorrect,
+      score: isCorrect ? 1 : 0,
       feedback: evaluation.feedback || "No detailed feedback provided"
     };
   } catch (error) {
     console.error("LAQ evaluation error:", error);
     const keywordScore = calculateKeywordScore(userAnswer, correctAnswer);
+    // Convert to whole number: 50%+ = 1 (correct), <50% = 0 (incorrect)
+    const isCorrect = keywordScore >= 0.5;
     return {
-      correct: keywordScore > 0.6,
-      score: keywordScore,
-      feedback: "Evaluation completed using keyword matching"
+      correct: isCorrect,
+      score: isCorrect ? 1 : 0,
+      feedback: "Evaluation completed using keyword matching due to parsing error"
     };
   }
 }

@@ -102,7 +102,8 @@ export async function POST(req: NextRequest) {
         details: {
           answers,
           timeTaken,
-          questionScores: feedback.map(f => f.score)
+          questionScores: feedback.map(f => f.score),
+          detailedFeedback: feedback // Store complete feedback for each question
         }
       })
       .select("id")

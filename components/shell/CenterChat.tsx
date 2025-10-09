@@ -41,6 +41,7 @@ export function CenterChat() {
   const [youtubeTopics, setYoutubeTopics] = React.useState<string[]>([]);
   const [loadingYoutube, setLoadingYoutube] = React.useState(false);
   const [generateQuiz, setGenerateQuiz] = React.useState(false);
+  const [enableYoutube, setEnableYoutube] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -99,12 +100,16 @@ export function CenterChat() {
     setIsCheckingAuth(false);
   }, [user]);
 
-  // Fetch YouTube recommendations when PDF is selected
+  // Fetch YouTube recommendations when PDF is selected (only if enabled)
   React.useEffect(() => {
-    if (current?.id && isAuthenticated) {
+    if (current?.id && isAuthenticated && enableYoutube) {
       fetchYouTubeRecommendations(current.id);
+    } else if (!enableYoutube) {
+      // Clear YouTube videos when disabled
+      setYoutubeVideos([]);
+      setYoutubeTopics([]);
     }
-  }, [current?.id, isAuthenticated]);
+  }, [current?.id, isAuthenticated, enableYoutube]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
@@ -253,6 +258,7 @@ export function CenterChat() {
             addMessage({ id: `${Date.now()}-user`, role: "user", content, createdAt: Date.now() });
             setValue("");
             setGenerateQuiz(false);
+            // Note: Don't reset enableYoutube checkbox as user might want to keep it enabled
             // Reset textarea height after clearing value
             setTimeout(adjustHeight, 0);
 
@@ -285,8 +291,10 @@ export function CenterChat() {
                       } else if (msg.type === 'delta') {
                         appendAssistantDelta(msg.data || '');
                       } else if (msg.type === 'done') {
-                        // Fetch YouTube recommendations after assistant is done
-                        fetchYouTubeRecommendations(current?.id ?? undefined, content);
+                        // Fetch YouTube recommendations after assistant is done (only if enabled)
+                        if (enableYoutube) {
+                          fetchYouTubeRecommendations(current?.id ?? undefined, content);
+                        }
                       } else if (msg.type === 'error') {
                         appendAssistantDelta(`\n[Error] ${msg.data}`);
                       } else if (msg.type === 'chat') {
@@ -317,6 +325,20 @@ export function CenterChat() {
                 </label>
               </div>
             )}
+            
+            {/* YouTube Recommendations Checkbox */}
+            <div className="mb-3 flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="enable-youtube"
+                checked={enableYoutube}
+                onChange={(e) => setEnableYoutube(e.target.checked)}
+                className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+              />
+              <label htmlFor="enable-youtube" className="text-sm text-muted-foreground">
+                Enable YouTube recommendations
+              </label>
+            </div>
             
             <div className={`relative rounded-xl border px-3 py-2 shadow-sm bg-white focus-within:ring-2 focus-within:ring-zinc-200`}>
               <textarea

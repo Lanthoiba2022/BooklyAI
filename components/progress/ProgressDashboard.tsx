@@ -11,9 +11,12 @@ import {
   Clock, 
   BookOpen,
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  X
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useUiStore } from "@/store/ui";
+import { QuizHistoryDetail } from "./QuizHistoryDetail";
 
 type ProgressData = {
   totalQuizzes: number;
@@ -58,17 +61,41 @@ type WeaknessData = {
   totalIncorrect: number;
 };
 
+type QuizHistoryItem = {
+  id: number;
+  quizId: number;
+  pdfId: number;
+  pdfName: string;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  timeTaken: number;
+  createdAt: string;
+  questionTypes: {
+    mcq: number;
+    saq: number;
+    laq: number;
+  };
+  answers: Record<number, string>;
+  questionScores: number[];
+};
+
 export function ProgressDashboard() {
+  const { setCenterView } = useUiStore();
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [weaknessData, setWeaknessData] = useState<WeaknessData | null>(null);
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showYouTube, setShowYouTube] = useState(false);
   const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
   const [loadingYouTube, setLoadingYouTube] = useState(false);
+  const [loadingQuizHistory, setLoadingQuizHistory] = useState(false);
+  const [selectedQuizAttempt, setSelectedQuizAttempt] = useState<number | null>(null);
 
   useEffect(() => {
     fetchProgressData();
     fetchWeaknessData();
+    fetchQuizHistory();
   }, []);
 
   const fetchProgressData = async () => {
@@ -101,6 +128,27 @@ export function ProgressDashboard() {
     }
   };
 
+  const fetchQuizHistory = async () => {
+    setLoadingQuizHistory(true);
+    try {
+      const response = await fetch("/api/progress/quiz-history?limit=20", {
+        credentials: "include"
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setQuizHistory(data.quizHistory || []);
+      } else {
+        const errorData = await response.json();
+        console.error("Quiz history error:", errorData);
+      }
+    } catch (error) {
+      console.error("Error fetching quiz history:", error);
+    } finally {
+      setLoadingQuizHistory(false);
+    }
+  };
+
   const fetchYouTubeRecommendations = async () => {
     if (showYouTube) return; // Already showing
 
@@ -121,12 +169,41 @@ export function ProgressDashboard() {
     }
   };
 
+  const handleClose = () => {
+    setCenterView("chat");
+  };
+
+  const handleQuizClick = (attemptId: number) => {
+    setSelectedQuizAttempt(attemptId);
+  };
+
+  const handleBackToHistory = () => {
+    setSelectedQuizAttempt(null);
+  };
+
+  // Show detailed quiz view if selected
+  if (selectedQuizAttempt) {
+    return <QuizHistoryDetail attemptId={selectedQuizAttempt} onBack={handleBackToHistory} />;
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span>Loading progress data...</span>
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Progress Dashboard</h1>
+            <p className="text-muted-foreground">Track your learning journey and performance</p>
+          </div>
+          <Button onClick={handleClose} variant="outline" size="sm">
+            <X className="h-4 w-4 mr-2" />
+            Close
+          </Button>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <span>Loading progress data...</span>
+          </div>
         </div>
       </div>
     );
@@ -134,10 +211,22 @@ export function ProgressDashboard() {
 
   if (!progressData) {
     return (
-      <div className="text-center py-12">
-        <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Progress Data</h3>
-        <p className="text-muted-foreground">Take some quizzes to see your progress here.</p>
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Progress Dashboard</h1>
+            <p className="text-muted-foreground">Track your learning journey and performance</p>
+          </div>
+          <Button onClick={handleClose} variant="outline" size="sm">
+            <X className="h-4 w-4 mr-2" />
+            Close
+          </Button>
+        </div>
+        <div className="text-center py-12">
+          <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No Progress Data</h3>
+          <p className="text-muted-foreground">Take some quizzes to see your progress here.</p>
+        </div>
       </div>
     );
   }
@@ -160,10 +249,16 @@ export function ProgressDashboard() {
           <h1 className="text-2xl font-bold">Progress Dashboard</h1>
           <p className="text-muted-foreground">Track your learning journey and performance</p>
         </div>
-        <Button onClick={fetchProgressData} variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={fetchProgressData} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+          <Button onClick={handleClose} variant="outline" size="sm">
+            <X className="h-4 w-4 mr-2" />
+            Close
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -353,6 +448,77 @@ export function ProgressDashboard() {
           )}
         </Card>
       )}
+
+      {/* Quiz History */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Quiz History</h3>
+          <Button 
+            onClick={fetchQuizHistory} 
+            variant="outline" 
+            size="sm"
+            disabled={loadingQuizHistory}
+          >
+            {loadingQuizHistory ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Refresh
+          </Button>
+        </div>
+        
+        {loadingQuizHistory ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+            <span>Loading quiz history...</span>
+          </div>
+        ) : quizHistory.length === 0 ? (
+          <div className="text-center py-8">
+            <BookOpen className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-muted-foreground">No quiz attempts yet</p>
+            <p className="text-sm text-muted-foreground">Take some quizzes to see your history here</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {quizHistory.map((quiz) => (
+              <div 
+                key={quiz.id} 
+                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => handleQuizClick(quiz.id)}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <div>
+                    <p className="font-medium">{quiz.pdfName}</p>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>{formatDate(quiz.createdAt)}</span>
+                      <span>•</span>
+                      <span>{formatTime(quiz.timeTaken)}</span>
+                      <span>•</span>
+                      <span>
+                        {quiz.questionTypes.mcq} MCQ, {quiz.questionTypes.saq} SAQ, {quiz.questionTypes.laq} LAQ
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      variant={quiz.percentage >= 80 ? "default" : quiz.percentage >= 60 ? "secondary" : "destructive"}
+                    >
+                      {quiz.percentage}%
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {quiz.score}/{quiz.totalQuestions} correct
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Recent Activity */}
       <Card className="p-6">
