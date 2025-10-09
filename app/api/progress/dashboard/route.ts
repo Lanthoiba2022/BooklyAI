@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
       .from("quiz_attempts")
       .select(`
         score,
+        details,
         created_at,
         quiz:quizzes(config)
       `)

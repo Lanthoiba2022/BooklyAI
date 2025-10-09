@@ -550,8 +550,13 @@ export async function getUserProgress(userId: number): Promise<ProgressMetrics> 
 
     // Calculate basic metrics
     const totalQuizzes = attempts.length;
-    const scores = attempts.map(a => a.score || 0);
-    const averageScore = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    // Convert each attempt to a percentage (0-100) based on its total questions
+    const attemptPercentages = attempts.map((a: any) => {
+      const totalQuestions = a?.quiz?.config?.questions?.length || 0;
+      const rawScore = a.score || 0;
+      return totalQuestions > 0 ? (rawScore / totalQuestions) * 100 : 0;
+    });
+    const averageScore = attemptPercentages.reduce((sum: number, pct: number) => sum + pct, 0) / attemptPercentages.length;
     
     // Calculate streak
     let streak = 0;
@@ -593,13 +598,18 @@ export async function getUserProgress(userId: number): Promise<ProgressMetrics> 
     
     // Mastery score (weighted average of recent attempts)
     const recentAttempts = attempts.slice(0, 5);
-    const masteryScore = recentAttempts.length > 0 
-      ? recentAttempts.reduce((sum, attempt) => sum + (attempt.score || 0), 0) / recentAttempts.length 
+    const masteryScore = recentAttempts.length > 0
+      ? recentAttempts.reduce((sum: number, attempt: any) => {
+          const totalQuestions = attempt?.quiz?.config?.questions?.length || 0;
+          const rawScore = attempt.score || 0;
+          const pct = totalQuestions > 0 ? (rawScore / totalQuestions) * 100 : 0;
+          return sum + pct;
+        }, 0) / recentAttempts.length
       : 0;
 
     // Consistency (inverse of standard deviation)
     const mean = averageScore;
-    const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length;
+    const variance = attemptPercentages.reduce((sum: number, pct: number) => sum + Math.pow(pct - mean, 2), 0) / attemptPercentages.length;
     const consistency = 1 - Math.sqrt(variance);
 
     // Completion rate (assuming all started quizzes are completed)
