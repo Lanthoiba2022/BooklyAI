@@ -110,6 +110,20 @@ export function LeftSidebar() {
 
   const handleChatClick = async (chatId: number) => {
     try {
+      // Neutralize current session state to prevent carryover into the next chat
+      try {
+        const { setChatId: setCid, setMessages: setMsgs } = useChatStore.getState();
+        setCid(null);
+        setMsgs([
+          {
+            id: `${Date.now()}-loading`,
+            role: "assistant",
+            content: "Loading previous chat...",
+            createdAt: Date.now(),
+          },
+        ]);
+      } catch {}
+
       const res = await fetch(`/api/messages?chatId=${chatId}`, {
         credentials: 'include',
       });

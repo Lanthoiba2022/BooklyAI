@@ -59,6 +59,8 @@ export function CenterChat() {
   // Track deferred YouTube fetch when chatId isn't available yet
   const lastPromptRef = React.useRef<string>("");
   const pendingYoutubeFetchRef = React.useRef<boolean>(false);
+  // Track backfill per chat to avoid duplicates
+  const backfilledChatIdRef = React.useRef<number | null>(null);
 
   // Fetch YouTube recommendations
   const fetchYouTubeRecommendations = async (pdfId?: number, currentQuestion?: string) => {
@@ -188,8 +190,10 @@ export function CenterChat() {
   // Note: Disabling YouTube recommendations should stop new fetches only.
   // Do not clear already fetched videos/topics so they remain visible.
 
-  // When a chat is opened or switched, load previously saved recs scoped to that chat
+  // When a chat is opened or switched, always clear transient recs first, then load for that chat
   React.useEffect(() => {
+    setYoutubeVideos([]);
+    setYoutubeTopics([]);
     if (chatId) {
       loadChatHistoryYouTubeRecommendations();
     }
@@ -202,11 +206,20 @@ export function CenterChat() {
     }
   }, [messages, chatId, loadChatHistoryYouTubeRecommendations]);
 
-  // Backfill: If a saved chat has no YouTube links in messages, generate and persist once
+  // Backfill: For historical chats only, once per chat, and only if toggle is enabled
   React.useEffect(() => {
-    if (!isAuthenticated || !chatId) return;
+    if (!isAuthenticated || !chatId || !enableYoutube) return;
+    if (backfilledChatIdRef.current === chatId) return;
+
+    // Consider it a historical chat only if there's at least one assistant message with content
+    const hasAssistantContent = Array.isArray(messages) && messages.some(
+      (m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.length > 0
+    );
+    if (!hasAssistantContent) return;
+
     const ids = extractRecommendedVideoIds();
     if (ids.length > 0) return;
+
     (async () => {
       try {
         setLoadingYoutube(true);
@@ -215,6 +228,7 @@ export function CenterChat() {
           const data = await res.json();
           setYoutubeVideos(Array.isArray(data.recommendations) ? data.recommendations : []);
           setYoutubeTopics(Array.isArray(data.topics) ? data.topics : []);
+          backfilledChatIdRef.current = chatId;
         }
       } catch (e) {
         console.error('Backfill YouTube recommendations failed:', e);
@@ -222,7 +236,7 @@ export function CenterChat() {
         setLoadingYoutube(false);
       }
     })();
-  }, [isAuthenticated, chatId, extractRecommendedVideoIds]);
+  }, [isAuthenticated, chatId, enableYoutube, messages, extractRecommendedVideoIds]);
 
   // Check authentication status and listen for changes
   React.useEffect(() => {
