@@ -1,12 +1,13 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { Plus, Files, BarChart3, History } from "lucide-react";
+import { Plus, Files, BarChart3, History, HelpCircle } from "lucide-react";
 import { AuthStatus } from "@/components/auth/AuthStatus";
 import { useUiStore } from "@/store/ui";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import * as React from "react";
 import { useAuthStore } from "@/store/auth";
 import { useChatStore } from "@/store/chat";
+import { useQuizStore } from "@/store/quiz";
 
 type ChatItem = {
   id: number;
@@ -23,6 +24,7 @@ export function LeftSidebar() {
   const [loadingChats, setLoadingChats] = React.useState(false);
   const { user } = useAuthStore();
   const { setChatId, reset } = useChatStore();
+  const { toggleQuizModal } = useQuizStore();
 
   // React immediately to global auth changes
   React.useEffect(() => {
@@ -122,6 +124,14 @@ export function LeftSidebar() {
     }
   };
 
+  const handleGenerateQuiz = () => {
+    toggleQuizModal(true);
+  };
+
+  const handleDashboardClick = () => {
+    setCenterView("progress");
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 space-y-3 flex-1 overflow-y-auto">
@@ -141,8 +151,21 @@ export function LeftSidebar() {
         </div>
         <div className="space-y-1">
           <div className="text-xs font-medium text-zinc-500 px-1">Progress</div>
-          <Button variant="ghost" className="w-full justify-start">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start"
+            onClick={handleDashboardClick}
+            disabled={!isAuthenticated}
+          >
             <BarChart3 className="h-4 w-4 mr-2" /> Dashboard
+          </Button>
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start"
+            onClick={handleGenerateQuiz}
+            disabled={!isAuthenticated}
+          >
+            <HelpCircle className="h-4 w-4 mr-2" /> Generate Quiz
           </Button>
         </div>
         <div className="space-y-1">
