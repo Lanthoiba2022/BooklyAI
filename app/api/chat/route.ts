@@ -8,6 +8,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 // Very basic in-memory per-instance rate limiting (best-effort)
 const lastRequestAtByUser = new Map<string, number>();

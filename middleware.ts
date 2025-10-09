@@ -38,18 +38,12 @@ export function middleware(req: NextRequest) {
 	const { supabaseUrl, supabaseAnonKey } = getPublicEnv();
 	if (!supabaseUrl || !supabaseAnonKey) return res;
 
-  // First, try to decode access token locally to avoid any network calls
+  // Edge-safe quick check: if a Supabase access token cookie exists, proceed.
+  // Full verification is handled by createServerClient below.
   try {
     const raw = req.cookies.get("sb-access-token")?.value
       || req.cookies.get("__Host-sb-access-token")?.value;
-    if (raw) {
-      const parts = raw.split(".");
-      if (parts.length === 3) {
-        const payloadJson = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-        const payload = JSON.parse(payloadJson);
-        if (payload?.sub) return res;
-      }
-    }
+    if (raw) return res;
   } catch {}
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {

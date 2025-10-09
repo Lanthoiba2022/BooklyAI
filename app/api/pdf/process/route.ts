@@ -7,6 +7,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 type Chunk = {
   page: number;
