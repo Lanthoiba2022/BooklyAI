@@ -192,11 +192,19 @@ graph TD
 
 ## Local Development Setup
 
-### 1) Prerequisites
+### 0) Prerequisites
 - Node.js 18+ (LTS recommended)
 - npm (comes with Node) or yarn/pnpm
 - A Supabase project (free tier is fine)
 - API keys for Google Gemini and optionally YouTube Data API v3
+
+### 1) Get the code
+
+```bash
+# Clone the repository and enter the project
+git clone https://github.com/<your-org>/<your-repo>.git
+cd <your-repo>/bookly
+```
 
 ### 2) Create and configure Supabase
 1. Create a new project at `https://supabase.com`.
@@ -204,16 +212,7 @@ graph TD
    - `Project URL` (Supabase URL)
    - `anon` public key (Client)
    - `service_role` key (Server; keep private, server-only)
-3. Apply the SQL migrations in order using the Supabase SQL Editor:
-   - `db/migrations/0001_init.sql`
-   - `db/migrations/0002_rls.sql`
-   - `db/migrations/0003_phase1_extend.sql`
-   - `db/migrations/0004_gemini_embeddings.sql`
-   - `db/migrations/0005_RAG.sql`
-   - `db/migrations/0006_youtube_recommendations.sql`
-   - `db/migrations/0007_persistent_youtube_videos.sql`
-   - `db/migrations/0008_cleanup_duplicate_videos.sql`
-   - `db/migrations/0009_quiz_specific_youtube_videos.sql`
+3. Apply the SQL migrations from /testDB/dbSchema.sql using the Supabase SQL Editor.
 
 Note: Some features (RAG, quizzes, recommendations) require the later migrations.
 
@@ -268,30 +267,29 @@ If auth is not configured, protected routes will redirect to `/signin`.
 
 ## Core Features & Flows
 
-### Chat with Retrieval
-- Endpoint: `POST /api/chat`
-- Pipeline:
-  - Validate session → provision user row → optional rate limit
-  - If `pdfId` present and ready, embed message and retrieve top chunks
-  - Build prompt with identity + retrieved context
-  - Stream responses from Gemini as JSONL frames (`delta`, `citations`, `done`)
-  - Persist messages in `messages` table
+### Feature Checklist (from ProjectPlan)
 
-### Messages History
-- Endpoint: `GET /api/messages?chatId=...`
-- Verifies chat ownership and returns ordered messages for the chat.
+- [x] **Source selector**: It has been implemented to allow choosing across all uploaded PDFs or a specific PDF, with file uploads supported. The upload flow and file listing are provided via `app/upload/page.tsx`, `app/files/page.tsx`, and the `components/files/*` and `components/shell/*` panels.
 
-### PDFs
-- Upload and view panels live under center/side panels.
-- RAG utilities in `lib/rag.ts` handle embeddings, chunk search, prompt building.
-- Status tracked in `pdfs` table; chunks stored in dedicated tables per migrations.
+- [x] **PDF viewer**: It has been implemented to display the selected PDF alongside the chat. The right panel provides page navigation, search, and resizing controls (see `components/shell/pdf/*` and the resizable layout in `components/ui/resizable.tsx`).
 
-### Quizzes & Progress
-- Quiz generation/evaluation endpoints under `app/api/quiz/*`.
-- Dashboard and history in `app/api/progress/*` and UI under `components/progress/*`.
+- [x] **Quiz Generator Engine (MCQ, SAQ, LAQ)**: It has been implemented to generate and render quizzes, capture answers, score submissions, store attempts, and provide explanations. Generation and evaluation routes exist under `app/api/quiz/*`, with UI in `components/quiz/*` and progress storage in `quiz_attempts`/`answers` tables.
 
-### YouTube Recommendations
-- Endpoints under `app/api/youtube/*` with optional `YT_API_KEY`.
+- [x] **Progress tracking**: It has been implemented to persist strengths/weaknesses and surface a dashboard. APIs live under `app/api/progress/*`, UI under `components/progress/*`, and storage in `user_progress` and `user_weaknesses` tables.
+
+- [x] **Chat UI (ChatGPT-inspired)**: It has been implemented with a left drawer for chats, a main chat area, and an input box, supporting new chat creation and switching. The layout is responsive across devices (see `components/shell/*` and `components/layout/MainLayout.tsx`).
+
+- [x] **RAG answers with citations**: It has been implemented with PDF ingestion (chunk + embed), similarity search, and citation surfaces in responses. The pipeline lives in `lib/rag.ts` and related API routes (`app/api/pdf/*`, `app/api/chat`), returning cited page numbers and quotes when available.
+
+- [x] **YouTube Videos Recommender**: It has been implemented to recommend educational videos relevant to context and detected weaknesses. Endpoints are under `app/api/youtube/*`, with UI in `components/youtube/*` and persistence in `youtube_recommendations`.
+
+### Operational Endpoints and Flows
+
+- **Chat with Retrieval**: `POST /api/chat` — Session is validated, user provisioned, optional rate limiting applied. When a `pdfId` is provided and ready, the query is embedded, top chunks are retrieved, and a response is streamed from Gemini with citations; messages are persisted in `messages`.
+- **Messages History**: `GET /api/messages?chatId=...` — Chat ownership is enforced and ordered messages are returned.
+- **PDFs**: Uploading, parsing, embedding, and search are performed via `app/api/pdf/*`, with status tracked in `pdfs` and chunk vectors in `chunks`.
+- **Quizzes & Progress**: Quiz generation/evaluation under `app/api/quiz/*`; dashboard and history powered by `app/api/progress/*` and visualized in `components/progress/*`.
+- **YouTube Recommendations**: Recommendation APIs live under `app/api/youtube/*` and are driven by content/topics and weaknesses, gated by `YT_API_KEY`.
 
 ---
 
