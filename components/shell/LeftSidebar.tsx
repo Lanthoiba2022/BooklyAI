@@ -24,7 +24,7 @@ export function LeftSidebar() {
   const [loadingChats, setLoadingChats] = React.useState(false);
   const { user } = useAuthStore();
   const { setChatId, reset } = useChatStore();
-  const { toggleQuizModal } = useQuizStore();
+  const { resetQuiz } = useQuizStore();
 
   // React immediately to global auth changes
   React.useEffect(() => {
@@ -125,7 +125,8 @@ export function LeftSidebar() {
   };
 
   const handleGenerateQuiz = () => {
-    toggleQuizModal(true);
+    resetQuiz();
+    setCenterView("quiz");
   };
 
   const handleDashboardClick = () => {

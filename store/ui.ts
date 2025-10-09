@@ -4,10 +4,10 @@ import { create } from "zustand";
 type UiState = {
   rightPanelOpen: boolean;
   sidebarOpen: boolean;
-  centerView: "chat" | "files" | "progress";
+  centerView: "chat" | "files" | "progress" | "quiz";
   setRightPanelOpen: (open: boolean) => void;
   setSidebarOpen: (open: boolean) => void;
-  setCenterView: (view: "chat" | "files" | "progress") => void;
+  setCenterView: (view: "chat" | "files" | "progress" | "quiz") => void;
 };
 
 export const useUiStore = create<UiState>((set) => ({

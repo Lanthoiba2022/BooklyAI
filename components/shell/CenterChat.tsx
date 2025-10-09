@@ -46,10 +46,10 @@ export function CenterChat() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
   const { setCurrent, current } = usePdfStore();
-  const { setRightPanelOpen, rightPanelOpen } = useUiStore();
+  const { setRightPanelOpen, rightPanelOpen, setCenterView } = useUiStore();
   const { user } = useAuthStore();
   const { chatId, setChatId, messages, addMessage, startAssistantMessage, appendAssistantDelta, setAssistantCitations } = useChatStore();
-  const { config, setCurrentQuiz, setGenerating } = useQuizStore();
+  const { resetQuiz } = useQuizStore();
 
   // Fetch YouTube recommendations
   const fetchYouTubeRecommendations = async (pdfId?: number, currentQuestion?: string) => {
@@ -239,42 +239,12 @@ export function CenterChat() {
             
             // Check if quiz generation is requested
             if (generateQuiz && current?.id) {
-              try {
-                setGenerating(true);
-                const res = await fetch('/api/quiz/generate', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include',
-                  body: JSON.stringify({
-                    pdfId: current.id,
-                    config: { ...config, difficulty: "auto" }
-                  }),
-                });
-                
-                if (!res.ok) {
-                  throw new Error('Failed to generate quiz');
-                }
-                
-                const data = await res.json();
-                setCurrentQuiz({
-                  id: data.quizId,
-                  pdfId: current.id,
-                  pdfName: current.name,
-                  config: { ...config, difficulty: "auto" },
-                  questions: data.questions,
-                  createdAt: new Date().toISOString()
-                });
-                
-                setValue("");
-                setGenerateQuiz(false);
-                setTimeout(adjustHeight, 0);
-                return;
-              } catch (error) {
-                console.error('Quiz generation error:', error);
-                alert('Failed to generate quiz. Please try again.');
-                setGenerating(false);
-                return;
-              }
+              resetQuiz();
+              setValue("");
+              setGenerateQuiz(false);
+              setTimeout(adjustHeight, 0);
+              setCenterView("quiz");
+              return;
             }
             
             // Normal chat flow

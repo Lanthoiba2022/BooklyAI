@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, RotateCcw, BookOpen } from "lucide-react";
 import { useQuizStore } from "@/store/quiz";
 import { usePdfStore } from "@/store/pdf";
+import { useUiStore } from "@/store/ui";
 
 export function QuizResults() {
-  const { quizResults, currentQuiz, resetQuiz, toggleQuizModal } = useQuizStore();
+  const { quizResults, currentQuiz, resetQuiz } = useQuizStore();
   const { jumpToPage, setRightPanelOpen } = usePdfStore();
+  const { setCenterView } = useUiStore();
 
   if (!quizResults || !currentQuiz) return null;
 
@@ -29,8 +31,8 @@ export function QuizResults() {
   };
 
   const handleRegenerateQuiz = async () => {
-    // Close modal and let user generate new quiz
-    toggleQuizModal(false);
+    // Reset quiz and go back to quiz config
+    resetQuiz();
   };
 
   return (
