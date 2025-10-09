@@ -14,6 +14,8 @@ type ChatState = {
   messages: ChatMessage[];
   isStreaming: boolean;
   setChatId: (id: number | null) => void;
+  setMessages: (messages: ChatMessage[]) => void;
+  setStreaming: (streaming: boolean) => void;
   addMessage: (message: ChatMessage) => void;
   startAssistantMessage: () => void;
   appendAssistantDelta: (delta: string) => void;
@@ -26,6 +28,8 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isStreaming: false,
   setChatId: (id) => set((s) => ({ chatId: id, messages: s.messages })),
+  setMessages: (messages) => set(() => ({ messages })),
+  setStreaming: (streaming) => set(() => ({ isStreaming: streaming })),
   addMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
   startAssistantMessage: () => set((s) => ({
     isStreaming: true,

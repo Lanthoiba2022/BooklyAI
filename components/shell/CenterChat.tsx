@@ -2,6 +2,8 @@
 import { Button } from "@/components/ui/button";
 import { Send, Mic, Paperclip } from "lucide-react";
 import * as React from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { usePdfStore } from "@/store/pdf";
 import { useUiStore } from "@/store/ui";
@@ -50,6 +52,7 @@ export function CenterChat() {
   const { setRightPanelOpen, rightPanelOpen, setCenterView } = useUiStore();
   const { user } = useAuthStore();
   const { chatId, setChatId, messages, addMessage, startAssistantMessage, appendAssistantDelta, setAssistantCitations } = useChatStore();
+  const { isStreaming, setStreaming } = useChatStore();
   const { resetQuiz } = useQuizStore();
 
   // Fetch YouTube recommendations
@@ -190,7 +193,13 @@ export function CenterChat() {
           messages.map((m) => (
             <div key={m.id} className="rounded-lg border bg-white p-3">
               <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">{m.role}</div>
-              <div className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</div>
+              <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                {m.role === "assistant" && (!m.content || m.content.length === 0) && isStreaming ? (
+                  <span className="text-zinc-500">typing…</span>
+                ) : (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                )}
+              </div>
               {m.role === "assistant" && Array.isArray(m.citations) && m.citations.length > 0 ? (
                 <div className="mt-2 border-t pt-2 space-y-1">
                   {m.citations.map((c, i) => (
@@ -266,6 +275,7 @@ export function CenterChat() {
             (async () => {
               try {
                 startAssistantMessage();
+                setStreaming(true);
                 const res = await fetch('/api/chat', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -274,6 +284,7 @@ export function CenterChat() {
                 });
                 if (!res.ok || !res.body) {
                   appendAssistantDelta("(Failed to start chat)");
+                  setStreaming(false);
                   return;
                 }
                 const reader = res.body.getReader();
@@ -295,8 +306,10 @@ export function CenterChat() {
                         if (enableYoutube) {
                           fetchYouTubeRecommendations(current?.id ?? undefined, content);
                         }
+                        setStreaming(false);
                       } else if (msg.type === 'error') {
                         appendAssistantDelta(`\n[Error] ${msg.data}`);
+                        setStreaming(false);
                       } else if (msg.type === 'chat') {
                         if (msg.data?.chatId) setChatId(msg.data.chatId);
                       }
@@ -305,6 +318,7 @@ export function CenterChat() {
                 }
               } catch (err) {
                 appendAssistantDelta("\n[Error] Chat failed.");
+                setStreaming(false);
               }
             })();
           }}
